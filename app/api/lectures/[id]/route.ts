@@ -13,6 +13,23 @@ export async function GET(
   return NextResponse.json(lecture);
 }
 
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try {
+    const body = await req.json();
+    if (body.concepts && body.conceptEdges) {
+      await repo.updateConceptsAndEdges(id, body.concepts, body.conceptEdges);
+      return NextResponse.json({ success: true });
+    }
+    return NextResponse.json({ error: "Missing concepts or conceptEdges" }, { status: 400 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: "Failed to update lecture map" }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -5,6 +5,7 @@ import {
   type FlashcardItem,
   type QuizQuestionItem,
 } from "../ai/schemas";
+import { sanitizeFlashcard } from "./classifier";
 
 const GROUNDEDNESS_THRESHOLD = 0.82;
 const CLARITY_THRESHOLD = 0.78;
@@ -28,8 +29,9 @@ export interface QualityReport {
 }
 
 /**
- * Step 1: Programmatic verbatim quote check.
+ * Step 1: Programmatic verbatim quote check & code-tracing sanity enforcement.
  * Every evidenceQuote MUST exist verbatim in rawTranscript.
+ * In addition, cards misclassified as code tracing without real code are regenerated.
  */
 export function verifyQuotesVerbatim(
   cards: FlashcardItem[],
@@ -38,7 +40,16 @@ export function verifyQuotesVerbatim(
   const verified: FlashcardItem[] = [];
   const failed: FlashcardItem[] = [];
 
-  for (const card of cards) {
+  for (const rawCard of cards) {
+    // Sanitize any invalid code-tracing question before verification
+    const sanitized = sanitizeFlashcard(rawCard);
+    const card: FlashcardItem = {
+      ...rawCard,
+      front: sanitized.front,
+      back: sanitized.back,
+      type: sanitized.type as FlashcardItem["type"],
+    };
+
     const quote = card.evidenceQuote.trim();
     const idx = transcript.indexOf(quote);
 

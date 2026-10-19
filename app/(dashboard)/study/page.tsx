@@ -91,7 +91,24 @@ function EvidenceDrawer({
   );
 }
 
+import { Suspense } from "react";
+
 export default function StudyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-400">
+          <Brain className="w-10 h-10 text-indigo-500 animate-pulse" />
+          <p className="text-sm font-medium">Loading active study queue...</p>
+        </div>
+      }
+    >
+      <StudyContent />
+    </Suspense>
+  );
+}
+
+function StudyContent() {
   const searchParams = useSearchParams();
   const lectureId = searchParams.get("lecture");
   const [lecture, setLecture] = useState<DemoLectureData | null>(null);

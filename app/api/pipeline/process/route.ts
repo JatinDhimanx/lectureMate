@@ -241,9 +241,25 @@ export async function POST(request: NextRequest) {
           bloomLevel: q.bloomLevel,
         }));
 
+        // Determine optimal academic title
+        let resolvedTitle = title?.trim();
+        if (!resolvedTitle) {
+          if (fileName) {
+            resolvedTitle = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+            // Capitalize title
+            resolvedTitle = resolvedTitle.replace(/\b\w/g, (l: string) => l.toUpperCase());
+          } else if (conceptsForSave.length > 0) {
+            resolvedTitle = `${conceptsForSave[0].name} & Related Concepts`;
+          } else if (cleanResult.summary) {
+            resolvedTitle = cleanResult.summary.split(".")[0].slice(0, 60);
+          } else {
+            resolvedTitle = "Lecture Study Pack";
+          }
+        }
+
         const lectureData: DemoLectureData = {
           id: lectureId,
-          title: title || cleanResult.summary.split(".")[0].slice(0, 70) || "Untitled Lecture",
+          title: resolvedTitle,
           sourceType: ingestResult.sourceType,
           sourceUrl: ingestResult.sourceUrl,
           rawTranscript: ingestResult.rawTranscript,

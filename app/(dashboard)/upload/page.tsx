@@ -294,7 +294,7 @@ export default function UploadPage() {
                           <p className="text-sm font-bold text-slate-900 mb-1.5">
                             {isDragging ? "Drop it here!" : "Drag & drop your file"}
                           </p>
-                          <p className="text-xs text-slate-500 mb-5">PDF, DOCX, TXT, SRT, VTT · Max 50 MB</p>
+                          <p className="text-xs text-slate-500 mb-5">PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, SRT · Max 50 MB</p>
                           <span className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-md shadow-indigo-500/25 hover:bg-indigo-700 transition-colors inline-block">
                             Browse Files
                           </span>
@@ -305,7 +305,7 @@ export default function UploadPage() {
                       ref={fileInputRef}
                       type="file"
                       className="hidden"
-                      accept=".txt,.srt,.vtt,.pdf,.docx"
+                      accept=".pdf,.docx,.doc,.pptx,.xlsx,.xls,.csv,.txt,.md,.srt,.vtt"
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                     />
                   </motion.div>

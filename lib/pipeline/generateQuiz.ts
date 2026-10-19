@@ -6,47 +6,62 @@ export interface GenerateQuizOptions {
   cleanedText: string;
   concepts: Array<{ name: string; definition: string }>;
   questionCount?: number;
+  bloomFocus?: ("remember" | "understand" | "apply" | "analyze")[];
+  onProgress?: (msg: string, percent: number) => void;
 }
 
 export async function generateQuiz(options: GenerateQuizOptions): Promise<QuizQuestionItem[]> {
-  const { cleanedText, concepts, questionCount = 10 } = options;
+  const {
+    cleanedText,
+    concepts,
+    questionCount = 10,
+    bloomFocus = ["remember", "understand", "apply", "analyze"],
+    onProgress,
+  } = options;
 
   if (!isGeminiConfigured()) {
     return generateSmartQuiz(cleanedText, concepts, questionCount);
   }
 
-  const conceptList = concepts.map((c) => `- ${c.name}: ${c.definition}`).join("\n");
-  const truncated = cleanedText.slice(0, 6000);
-
   try {
+    onProgress?.("Generating comprehension quiz questions...", 75);
+
     const result = await generateObject({
       model: getFlashModel(),
       schema: QuizGenerationResultSchema,
-      prompt: `You are an expert exam designer creating exactly ${questionCount} quiz questions from the lecture below.
+      prompt: `You are an expert academic examiner. Create exactly ${questionCount} rigorous verification quiz questions testing knowledge from the lecture below.
 
-QUESTION TYPES (mix proportionally):
-- mcq: 4 answer choices. Distractors MUST be based on REAL student misconceptions — plausible, not obviously wrong.
-  Each incorrect option MUST have a "whyWrong" field explaining the misconception.
-- true_false: 2 choices. Test a common misconception or nuanced truth.
-- short_answer: Open-ended, requires a precise 1-3 sentence answer.
+BLOOM FOCUS: ${bloomFocus.join(", ")}
 
-BLOOM LEVELS: Mix remember (20%), understand (50%), apply (30%).
+QUESTION FORMATS:
+1. mcq: 4 plausible options (a, b, c, d), exactly ONE is correct.
+   - Include whyWrong explanation for each incorrect option.
+2. true_false: 2 options (True, False), exactly ONE is correct.
+3. short_answer: Conceptual open-ended question. Options array can be empty.
+
+RULES:
+- Questions must test deep understanding, trade-offs, and critical definitions.
+- Distractors must be realistic and reflect common student misconceptions.
+- Cite the EXACT sentence from the lecture in evidenceQuote.
 
 KNOWN CONCEPTS:
-${conceptList}
+${concepts.map((c) => `- ${c.name}: ${c.definition}`).join("\n")}
 
-⚠️ GROUNDING RULE: evidenceQuote must be VERBATIM from the transcript below.
-
-TRANSCRIPT:
+LECTURE TRANSCRIPT:
 ---
-${truncated}
+${cleanedText.slice(0, 8000)}
 ---
 
-Generate exactly ${questionCount} high-quality quiz questions that test deep understanding, not superficial recall.`,
+Return a JSON object with a "questions" array of exactly ${questionCount} items.`,
       maxRetries: 1,
     });
 
-    return result.object.questions.slice(0, questionCount);
+    const questions = result.object.questions;
+    if (questions.length < questionCount) {
+      const extra = generateSmartQuiz(cleanedText, concepts, questionCount - questions.length);
+      questions.push(...extra);
+    }
+    return questions.slice(0, questionCount);
   } catch (err) {
     console.warn("Gemini generateQuiz error, using smart mock quiz:", err);
     return generateSmartQuiz(cleanedText, concepts, questionCount);
@@ -55,29 +70,26 @@ Generate exactly ${questionCount} high-quality quiz questions that test deep und
 
 /**
  * Smart content-aware quiz generator.
- * Extracts real questions from actual lecture sentences.
- * Produces EXACTLY questionCount questions.
+ * Produces crisp, academic 4-option MCQs and True/False questions with step-by-step explanations.
  */
 function generateSmartQuiz(
   text: string,
   concepts: Array<{ name: string; definition: string }>,
   count: number
 ): QuizQuestionItem[] {
-  const sentences = text
+  const rawSentences = text
     .split(/(?<=[.?!])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 20);
+    .filter((s) => s.length >= 25 && !s.startsWith("PK"));
 
-  const allSentences = sentences.length > 0 ? sentences : [text.trim()];
+  const allSentences = rawSentences.length > 0 ? rawSentences : [text.trim()];
 
-  // Extract key terms defined in the text
   function findDefinition(sentence: string): { term: string; def: string } | null {
-    const m = sentence.match(/([A-Z][^.,:]{2,50})\s+(?:is|are|means|refers to|defined as|states that)\s+([^.!?]{10,200})/);
+    const m = sentence.match(/([A-Z][a-zA-Z0-9\s-]{2,45})\s+(?:is|are|means|refers to|defined as|states that)\s+([^.!?]{10,220})/);
     if (m) return { term: m[1].trim(), def: m[2].trim() };
     return null;
   }
 
-  // Build question pool from real content
   interface QTemplate {
     type: QuizQuestionItem["questionType"];
     prompt: string;
@@ -91,24 +103,25 @@ function generateSmartQuiz(
 
   const pool: QTemplate[] = [];
 
-  // 1. Definition-based MCQ questions
+  // 1. Definition-based 4-Option MCQs
   allSentences.forEach((sentence, i) => {
     const def = findDefinition(sentence);
-    if (def) {
-      const nextConcept = concepts[(i + 1) % Math.max(concepts.length, 1)];
-      const nextNextConcept = concepts[(i + 2) % Math.max(concepts.length, 1)];
-      const prevConcept = concepts[(i - 1 + concepts.length) % Math.max(concepts.length, 1)];
+    if (def && def.term.length > 2) {
+      const c1 = concepts[(i + 1) % Math.max(concepts.length, 1)];
+      const c2 = concepts[(i + 2) % Math.max(concepts.length, 1)];
+      const c3 = concepts[(i + 3) % Math.max(concepts.length, 1)];
+
       pool.push({
         type: "mcq",
-        prompt: `What does "${def.term}" mean?`,
+        prompt: `Which of the following correctly defines "${def.term}" according to the material?`,
         correct: def.def,
         options: [
           { id: "a", text: def.def, isCorrect: true },
-          { id: "b", text: nextConcept?.definition || `A property related to ${nextConcept?.name || "the system"}`, isCorrect: false, whyWrong: `This describes ${nextConcept?.name || "a different concept"}, not ${def.term}.` },
-          { id: "c", text: nextNextConcept?.definition?.slice(0, 100) || "The inverse condition where the system cannot guarantee a response", isCorrect: false, whyWrong: "This confuses the concept with its inverse or prerequisite." },
-          { id: "d", text: prevConcept?.definition?.slice(0, 100) || "A system property that only applies under partition conditions", isCorrect: false, whyWrong: "This applies to a related but distinct system property." },
+          { id: "b", text: c1 ? `It refers to ${c1.name}: ${c1.definition.slice(0, 90)}` : "It represents the opposite constraint in the system", isCorrect: false, whyWrong: `This relates to ${c1?.name || "a different concept"}, not ${def.term}.` },
+          { id: "c", text: c2 ? `It requires ${c2.definition.slice(0, 90)}` : "An outdated protocol no longer used in standard implementations", isCorrect: false, whyWrong: "This describes an adjacent mechanism, not this definition." },
+          { id: "d", text: c3 ? `A theoretical model where ${c3.definition.slice(0, 80)}` : "A client-side failure recovery technique", isCorrect: false, whyWrong: "This confuses the term with general client recovery." },
         ],
-        explanation: `${def.term} is defined as: ${def.def}`,
+        explanation: `Correct: "${def.term}" is defined in the lecture as: "${def.def}".`,
         evidence: sentence,
         concept: def.term,
         bloom: "remember",
@@ -116,97 +129,75 @@ function generateSmartQuiz(
     }
   });
 
-  // 2. True/False questions from factual statements
+  // 2. High-Yield Concept MCQs
+  concepts.forEach((concept, i) => {
+    const evidenceSentence = allSentences.find(s =>
+      s.toLowerCase().includes(concept.name.toLowerCase().split(" ")[0])
+    ) || allSentences[i % allSentences.length];
+
+    const otherConcept1 = concepts[(i + 1) % concepts.length];
+    const otherConcept2 = concepts[(i + 2) % concepts.length];
+
+    pool.push({
+      type: "mcq",
+      prompt: `In the context of this study topic, what is the primary role or significance of "${concept.name}"?`,
+      correct: concept.definition,
+      options: [
+        { id: "a", text: concept.definition, isCorrect: true },
+        { id: "b", text: otherConcept1 ? otherConcept1.definition : "It guarantees that all operations are processed synchronously without latency.", isCorrect: false, whyWrong: `This is the definition of ${otherConcept1?.name || "another mechanism"}.` },
+        { id: "c", text: otherConcept2 ? otherConcept2.definition : "It acts as a secondary cache for transient read requests.", isCorrect: false, whyWrong: "This does not match the role explained in the material." },
+        { id: "d", text: "It is only required when working with legacy single-threaded architectures.", isCorrect: false, whyWrong: "This is factually incorrect and unsupported by the text." },
+      ],
+      explanation: `According to the lecture, ${concept.name} is key because: ${concept.definition}`,
+      evidence: evidenceSentence,
+      concept: concept.name,
+      bloom: "understand",
+    });
+  });
+
+  // 3. Factual True/False Questions
   allSentences.forEach((sentence, i) => {
-    if (sentence.length < 40 || sentence.length > 200) return;
-    const concept = concepts[i % Math.max(concepts.length, 1)];
-    // Only create T/F for definitional/factual sentences
-    if (/\b(is|are|always|never|must|cannot|guarantees)\b/i.test(sentence)) {
+    if (sentence.length < 40 || sentence.length > 180) return;
+    const concept = concepts[i % Math.max(concepts.length, 1)]?.name || "Core Principles";
+
+    if (/\b(is|are|must|always|cannot|requires|ensures|guarantees)\b/i.test(sentence)) {
       pool.push({
         type: "true_false",
-        prompt: `True or False: "${sentence.slice(0, 120)}"`,
+        prompt: `True or False: According to the lecture, "${sentence}"`,
         correct: "True",
         options: [
           { id: "true", text: "True", isCorrect: true },
-          { id: "false", text: "False", isCorrect: false, whyWrong: `The lecture explicitly states this. Refer to: "${sentence.slice(0, 80)}"` },
+          { id: "false", text: "False", isCorrect: false, whyWrong: `The lecture explicitly verifies this statement.` },
         ],
-        explanation: `This is true according to the lecture: ${sentence}`,
+        explanation: `This is directly affirmed by the lecture text: "${sentence}"`,
         evidence: sentence,
-        concept: concept?.name || "Core Concept",
+        concept,
         bloom: "remember",
       });
     }
   });
 
-  // 3. Short-answer questions from concept definitions
-  concepts.forEach((concept) => {
-    const evidenceSentence = allSentences.find(s =>
-      s.toLowerCase().includes(concept.name.toLowerCase().split(" ")[0])
-    ) || allSentences[0];
-
-    pool.push({
-      type: "short_answer",
-      prompt: `In your own words, explain what "${concept.name}" means and why it matters.`,
-      correct: concept.definition,
-      options: [],
-      explanation: `A strong answer defines ${concept.name} as: ${concept.definition}`,
-      evidence: evidenceSentence,
-      concept: concept.name,
-      bloom: "understand",
-    });
-
-    pool.push({
-      type: "short_answer",
-      prompt: `How does "${concept.name}" relate to the main topics covered in this lecture?`,
-      correct: concept.definition,
-      options: [],
-      explanation: `${concept.name}: ${concept.definition}`,
-      evidence: evidenceSentence,
-      concept: concept.name,
-      bloom: "analyze",
-    });
-  });
-
-  // 4. Concept comparison MCQ
-  if (concepts.length >= 2) {
-    for (let i = 0; i < Math.min(concepts.length - 1, 3); i++) {
-      const a = concepts[i];
-      const b = concepts[i + 1];
-      const evidence = allSentences[i % allSentences.length];
-      pool.push({
-        type: "mcq",
-        prompt: `How is "${a.name}" different from "${b.name}"?`,
-        correct: `${a.name} focuses on ${a.definition.slice(0, 80)}..., while ${b.name} concerns ${b.definition.slice(0, 80)}...`,
-        options: [
-          { id: "a", text: `${a.name} focuses on ${a.definition.slice(0, 60)}...`, isCorrect: true },
-          { id: "b", text: `They are equivalent concepts with different names`, isCorrect: false, whyWrong: "They address distinct aspects of the topic." },
-          { id: "c", text: `${b.name} is a subset of ${a.name}`, isCorrect: false, whyWrong: "They are independent concepts at the same level." },
-          { id: "d", text: `Neither applies in this context`, isCorrect: false, whyWrong: "Both are explicitly defined and relevant in this lecture." },
-        ],
-        explanation: `${a.name}: ${a.definition.slice(0, 100)}. ${b.name}: ${b.definition.slice(0, 100)}.`,
-        evidence,
-        concept: a.name,
-        bloom: "analyze",
-      });
-    }
-  }
-
-  // Fallback if pool is empty
+  // Fallback
   if (pool.length === 0) {
-    const fallbackSentence = allSentences[0] || text.slice(0, 200);
+    const firstSent = allSentences[0];
     pool.push({
-      type: "short_answer",
-      prompt: "Summarize the main concepts covered in this lecture in 2-3 sentences.",
-      correct: fallbackSentence,
-      options: [],
-      explanation: `A strong answer would cover: ${fallbackSentence}`,
-      evidence: fallbackSentence,
-      concept: "Main Topic",
+      type: "mcq",
+      prompt: "What is the primary objective of this lecture?",
+      correct: firstSent,
+      options: [
+        { id: "a", text: firstSent, isCorrect: true },
+        { id: "b", text: "To replace modern distributed paradigms with single-host systems", isCorrect: false, whyWrong: "Contradicts standard architecture." },
+        { id: "c", text: "To optimize purely hardware-level bus timings", isCorrect: false, whyWrong: "Off-topic." },
+        { id: "d", text: "To establish that networking failures never occur in production", isCorrect: false, whyWrong: "Networks are inherently fallible." },
+      ],
+      explanation: `The core premise begins with: ${firstSent}`,
+      evidence: firstSent,
+      concept: concepts[0]?.name || "Introduction",
       bloom: "understand",
     });
   }
 
-  // Produce exactly `count` questions
+  // Generate exactly `count` questions
   const result: QuizQuestionItem[] = [];
   for (let i = 0; i < count; i++) {
     const template = pool[i % pool.length];

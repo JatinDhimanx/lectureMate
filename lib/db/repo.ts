@@ -95,6 +95,19 @@ export const repo = {
     return true;
   },
 
+  updateConceptsAndEdges: async (
+    lectureId: string,
+    concepts: DemoLectureData["concepts"],
+    conceptEdges: DemoLectureData["conceptEdges"]
+  ): Promise<boolean> => {
+    const lecture = lectureStore.get(lectureId);
+    if (!lecture) return false;
+    lecture.concepts = concepts;
+    lecture.conceptEdges = conceptEdges;
+    lectureStore.set(lectureId, lecture);
+    return true;
+  },
+
   logReview: async (log: Omit<ReviewLog, "id" | "reviewedAt">): Promise<ReviewLog> => {
     const entry: ReviewLog = {
       ...log,
