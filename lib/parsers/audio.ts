@@ -82,11 +82,13 @@ export function getMediaDuration(filePath: string): Promise<number> {
 export function cleanupAudioChunks(chunks: AudioChunk[]): void {
   for (const chunk of chunks) {
     try {
-      if (fs.existsSync(chunk.filePath)) {
-        fs.unlinkSync(chunk.filePath);
-      }
+      fs.unlinkSync(chunk.filePath);
+    } catch {
+      // Best-effort cleanup
+    }
+    try {
       const dir = path.dirname(chunk.filePath);
-      if (fs.existsSync(dir) && dir.includes("recallloop-audio-")) {
+      if (dir.includes("recallloop-audio-")) {
         fs.rmdirSync(dir);
       }
     } catch {

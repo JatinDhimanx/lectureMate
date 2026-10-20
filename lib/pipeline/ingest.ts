@@ -382,7 +382,7 @@ export async function ingestTranscript(options: IngestOptions): Promise<IngestRe
       mergedTranscript = `[Audio Lecture: ${fileName || "Voice Recording"}]\nToday we are examining fundamental system reliability and consensus principles across modern distributed clusters. When nodes communicate over asynchronous networks, latency jitter and packet dropouts require majority quorums to safeguard consistency against split-brain divergence. The CAP theorem demonstrates that under network partitions, systems must choose between consistency and availability.`;
     }
 
-    if (shouldDeleteTemp && tempAudioFile && fs.existsSync(tempAudioFile)) {
+    if (shouldDeleteTemp && tempAudioFile) {
       try { fs.unlinkSync(tempAudioFile); } catch {}
     }
     if (chunks.length > 0) {
