@@ -17,8 +17,10 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.87",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "@types/canvas-confetti": "^1.9.0",
+    "@types/nodemailer": "^8.0.2",
     "@xyflow/react": "^12.12.0",
     "ai": "^7.0.127",
     "canvas-confetti": "^1.9.4",
@@ -32,6 +34,7 @@
     "lucide-react": "^1.52.0",
     "mammoth": "^1.13.0",
     "next": "16.3.8",
+    "nodemailer": "^10.1.6",
     "pdf-parse": "1.1.1",
     "postgres": "^3.4.9",
     "react": "19.2.8",

@@ -135,18 +135,53 @@ export default function QuizPage() {
             ))}
           </div>
 
-          <div className="flex gap-3 justify-center">
+          {/* Weak Topic Detection & Targeted Revision Analysis */}
+          {scores.some((s) => !s) && (
+            <div className="mb-6 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-left">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  ⚠️ Weak Topic Detection & Targeted Revision
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed mb-3">
+                Based on your diagnostic answers, the following concepts need reinforcement before your exam:
+              </p>
+              <div className="space-y-2">
+                {questions
+                  .map((q, idx) => ({ q, idx, passed: scores[idx] }))
+                  .filter((item) => !item.passed)
+                  .map(({ q, idx }) => (
+                    <div key={idx} className="p-2.5 rounded-xl bg-white border border-amber-200/60 text-xs">
+                      <span className="font-bold text-slate-800 block">Q{idx + 1}: {q.prompt}</span>
+                      {q.options.find((o) => !o.isCorrect && o.whyWrong) && (
+                        <span className="text-[11px] text-rose-600 block mt-1">
+                          Key fix: {q.options.find((o) => !o.isCorrect && o.whyWrong)?.whyWrong}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={restart}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors"
             >
               <RotateCcw className="w-4 h-4" /> Retry Quiz
             </button>
             <Link
-              href="/dashboard"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-all"
+              href={`/study?lecture=${lecture.id}`}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs sm:text-sm font-semibold hover:bg-purple-100 transition-colors"
             >
-              Back to Dashboard
+              Targeted Flashcards
+            </Link>
+            <Link
+              href={`/lectures/${lecture.id}`}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition-all"
+            >
+              Ask the Lecture (Q&A)
             </Link>
           </div>
         </motion.div>

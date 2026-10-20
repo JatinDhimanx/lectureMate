@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repo } from "@/lib/db/repo";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 
 export async function GET() {
-  const lectures = await repo.getLectures();
+  const user = await getCurrentUser();
+  const lectures = await repo.getLectures(user?.id);
   return NextResponse.json(lectures.map((l) => ({
     id: l.id,
     title: l.title,

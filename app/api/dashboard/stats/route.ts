@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { repo } from "@/lib/db/repo";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 
 export async function GET() {
-  const lectures = await repo.getLectures();
-  const allCards = await repo.getAllCards();
-  const dueCards = await repo.getCardsDueToday();
+  const user = await getCurrentUser();
+  const lectures = await repo.getLectures(user?.id);
+  const allCards = await repo.getAllCards(user?.id);
+  const dueCards = await repo.getCardsDueToday(user?.id);
 
   let newCards = 0;
   let learningCards = 0;

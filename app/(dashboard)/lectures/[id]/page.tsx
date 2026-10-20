@@ -12,7 +12,11 @@ import { cn } from "@/lib/utils";
 import type { DemoLectureData } from "@/lib/db/mock-data";
 import { CardEditorModal } from "@/components/study/CardEditorModal";
 
-type ActiveTab = "overview" | "cards" | "quiz" | "transcript";
+import { LectureQAModule } from "@/components/study/LectureQAModule";
+import { TopicQuizModule } from "@/components/study/TopicQuizModule";
+import { MessageSquare } from "lucide-react";
+
+type ActiveTab = "overview" | "cards" | "quiz" | "qa" | "transcript";
 
 export default function LectureDetailPage() {
   const params = useParams();
@@ -71,6 +75,7 @@ export default function LectureDetailPage() {
     { id: "overview", label: "Overview", icon: Star },
     { id: "cards", label: `Cards (${lecture.cards.length})`, icon: Brain },
     { id: "quiz", label: `Quiz (${lecture.quizQuestions.length})`, icon: BarChart2 },
+    { id: "qa", label: "Ask Lecture", icon: MessageSquare },
     { id: "transcript", label: "Transcript", icon: FileText },
   ];
 
@@ -293,41 +298,19 @@ export default function LectureDetailPage() {
       )}
 
       {activeTab === "quiz" && (
-        <div className="space-y-4">
-          {lecture.quizQuestions.map((q, i) => (
-            <div key={q.id} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700">Q{i + 1}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">{q.questionType.replace("_", " ")}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 capitalize">{q.bloomLevel}</span>
-              </div>
-              <p className="text-base font-bold text-slate-900 mb-4">{q.prompt}</p>
-              <div className="space-y-2">
-                {q.options.map((opt) => (
-                  <div
-                    key={opt.id}
-                    className={cn(
-                      "flex items-start gap-2.5 p-3 rounded-2xl text-xs",
-                      opt.isCorrect
-                        ? "bg-emerald-50 text-emerald-950 border border-emerald-200 font-semibold"
-                        : "text-slate-600 bg-slate-50 border border-slate-100"
-                    )}
-                  >
-                    <span className="w-5 h-5 rounded-full border border-current flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">
-                      {opt.isCorrect ? "✓" : "×"}
-                    </span>
-                    <div>
-                      <p>{opt.text}</p>
-                      {!opt.isCorrect && opt.whyWrong && (
-                        <p className="text-rose-600 mt-1 italic">💡 Misconception: {opt.whyWrong}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <TopicQuizModule
+          questions={lecture.quizQuestions}
+          lectureId={lecture.id}
+          lectureTitle={lecture.title}
+        />
+      )}
+
+      {activeTab === "qa" && (
+        <LectureQAModule
+          lectureId={lecture.id}
+          lectureTitle={lecture.title}
+          suggestedConcepts={lecture.concepts.slice(0, 5).map((c) => c.name)}
+        />
       )}
 
       {activeTab === "transcript" && (

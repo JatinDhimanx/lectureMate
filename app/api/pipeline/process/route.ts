@@ -7,6 +7,7 @@ import { generateCards } from "@/lib/pipeline/generateCards";
 import { generateQuiz } from "@/lib/pipeline/generateQuiz";
 import { verifyAndDeduplicateCards, verifyQuizQuotes } from "@/lib/pipeline/verify";
 import { repo } from "@/lib/db/repo";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 import type { DemoLectureData } from "@/lib/db/mock-data";
 
 export const runtime = "nodejs";
@@ -17,6 +18,7 @@ function sseEvent(event: string, data: object) {
 }
 
 export async function POST(request: NextRequest) {
+  const currentUser = await getCurrentUser();
   const encoder = new TextEncoder();
 
   const readable = new ReadableStream({
@@ -281,7 +283,7 @@ export async function POST(request: NextRequest) {
           quizQuestions: quizQuestionsForSave,
         };
 
-        await repo.saveLecture(lectureData);
+        await repo.saveLecture(lectureData, currentUser?.id);
 
         send("progress", { step: "complete", message: "Done!", percent: 100 });
         send("complete", { lectureId, report, cardCount: cardsForSave.length, quizCount: quizQuestionsForSave.length });
