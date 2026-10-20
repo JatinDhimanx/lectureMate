@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   BookOpen,
   Sparkles,
@@ -37,15 +37,15 @@ import {
 } from "lucide-react";
 
 // ─── Animation Variants ──────────────────────────────────────────────────────
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 32 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
 };
-const fadeIn = {
+const fadeIn: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.5 } },
 };
-const staggerChildren = {
+const staggerChildren: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.1 } },
 };
