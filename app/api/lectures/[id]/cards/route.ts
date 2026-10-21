@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { repo } from "@/lib/db/repo";
 import { createInitialCardState } from "@/lib/fsrs/scheduler";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: lectureId } = await params;
+  const { id } = await params;
+  const lectureId = id ? decodeURIComponent(id).trim() : "";
   const body = await req.json();
 
   const initialFsrs = createInitialCardState();
@@ -43,7 +47,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: lectureId } = await params;
+  const { id } = await params;
+  const lectureId = id ? decodeURIComponent(id).trim() : "";
   const body = await req.json();
   const { cardId, ...updates } = body;
 
@@ -63,7 +68,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: lectureId } = await params;
+  const { id } = await params;
+  const lectureId = id ? decodeURIComponent(id).trim() : "";
   const { searchParams } = new URL(req.url);
   const cardId = searchParams.get("cardId");
 

@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { SAMPLE_LECTURE_DATA, DemoLectureData } from "./mock-data";
 
 export interface ReviewLog {
@@ -31,11 +33,151 @@ const reviewLogs: ReviewLog[] =
 const userStore: Map<string, UserAccount> =
   globalForRepo.userStore || (globalForRepo.userStore = new Map());
 
+// Local filesystem persistence directory (survives dev server restarts and multi-worker isolation)
+const DATA_DIR = path.join(process.cwd(), ".data");
+const LECTURES_DIR = path.join(DATA_DIR, "lectures");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+const REVIEWS_FILE = path.join(DATA_DIR, "reviews.json");
+
+function ensureDirs() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(LECTURES_DIR)) {
+      fs.mkdirSync(LECTURES_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn("[repo] Could not create storage directory:", err);
+  }
+}
+
+function loadLectureFromDisk(id: string): DemoLectureData | null {
+  try {
+    ensureDirs();
+    const filePath = path.join(LECTURES_DIR, `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const data = JSON.parse(content) as DemoLectureData;
+      if (data && data.id) {
+        lectureStore.set(data.id, data);
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn(`[repo] Error loading lecture ${id} from disk:`, err);
+  }
+  return null;
+}
+
+function saveLectureToDisk(lecture: DemoLectureData) {
+  try {
+    ensureDirs();
+    const filePath = path.join(LECTURES_DIR, `${lecture.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(lecture, null, 2), "utf-8");
+  } catch (err) {
+    console.warn(`[repo] Error saving lecture ${lecture.id} to disk:`, err);
+  }
+}
+
+function deleteLectureFromDisk(id: string) {
+  try {
+    const filePath = path.join(LECTURES_DIR, `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.warn(`[repo] Error deleting lecture ${id} from disk:`, err);
+  }
+}
+
+function loadAllLecturesFromDisk(): DemoLectureData[] {
+  try {
+    ensureDirs();
+    if (fs.existsSync(LECTURES_DIR)) {
+      const files = fs.readdirSync(LECTURES_DIR);
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          try {
+            const content = fs.readFileSync(path.join(LECTURES_DIR, file), "utf-8");
+            const lecture = JSON.parse(content) as DemoLectureData;
+            if (lecture && lecture.id) {
+              lectureStore.set(lecture.id, lecture);
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[repo] Error scanning lectures directory:", err);
+  }
+  return Array.from(lectureStore.values());
+}
+
+function loadUsersFromDisk() {
+  try {
+    ensureDirs();
+    if (fs.existsSync(USERS_FILE)) {
+      const content = fs.readFileSync(USERS_FILE, "utf-8");
+      const list = JSON.parse(content) as UserAccount[];
+      if (Array.isArray(list)) {
+        for (const u of list) {
+          userStore.set(u.email.toLowerCase().trim(), u);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[repo] Error loading users from disk:", err);
+  }
+}
+
+function saveUsersToDisk() {
+  try {
+    ensureDirs();
+    const list = Array.from(userStore.values());
+    fs.writeFileSync(USERS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[repo] Error saving users to disk:", err);
+  }
+}
+
+function loadReviewsFromDisk() {
+  try {
+    ensureDirs();
+    if (fs.existsSync(REVIEWS_FILE)) {
+      const content = fs.readFileSync(REVIEWS_FILE, "utf-8");
+      const list = JSON.parse(content) as ReviewLog[];
+      if (Array.isArray(list)) {
+        reviewLogs.length = 0;
+        reviewLogs.push(...list);
+      }
+    }
+  } catch (err) {
+    console.warn("[repo] Error loading reviews from disk:", err);
+  }
+}
+
+function saveReviewsToDisk() {
+  try {
+    ensureDirs();
+    fs.writeFileSync(REVIEWS_FILE, JSON.stringify(reviewLogs, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[repo] Error saving reviews to disk:", err);
+  }
+}
+
+// Initial hydration from disk
+ensureDirs();
+loadUsersFromDisk();
+loadReviewsFromDisk();
+loadAllLecturesFromDisk();
+
 // Seed sample lecture for demo session if empty
-if (lectureStore.size === 0) {
+if (!lectureStore.has(SAMPLE_LECTURE_DATA.id)) {
   const sample = JSON.parse(JSON.stringify(SAMPLE_LECTURE_DATA)) as DemoLectureData;
   sample.userId = "demo-user-id";
   lectureStore.set(sample.id, sample);
+  saveLectureToDisk(sample);
 }
 
 // Seed default demo user if empty
@@ -47,6 +189,7 @@ if (!userStore.has("demo@lecturemate.ai")) {
     fullName: "Demo Student",
     createdAt: new Date().toISOString(),
   });
+  saveUsersToDisk();
 }
 
 export const repo = {
@@ -68,15 +211,18 @@ export const repo = {
       createdAt: new Date().toISOString(),
     };
     userStore.set(emailKey, account);
+    saveUsersToDisk();
     return account;
   },
 
   findUserByEmail: async (email: string): Promise<UserAccount | null> => {
+    loadUsersFromDisk();
     const account = userStore.get(email.toLowerCase().trim());
     return account ? JSON.parse(JSON.stringify(account)) : null;
   },
 
   verifyUserPassword: async (email: string, password: string): Promise<UserAccount | null> => {
+    loadUsersFromDisk();
     const account = userStore.get(email.toLowerCase().trim());
     if (!account) return null;
     if (account.passwordHash === password) {
@@ -87,9 +233,9 @@ export const repo = {
 
   updateUserPassword: async (email: string, newPassword: string): Promise<boolean> => {
     const emailKey = email.toLowerCase().trim();
+    loadUsersFromDisk();
     const account = userStore.get(emailKey);
     if (!account) {
-      // create entry if missing
       userStore.set(emailKey, {
         id: `usr_${Buffer.from(emailKey).toString("hex").slice(0, 16)}`,
         email: emailKey,
@@ -97,18 +243,21 @@ export const repo = {
         fullName: emailKey.split("@")[0],
         createdAt: new Date().toISOString(),
       });
+      saveUsersToDisk();
       return true;
     }
     account.passwordHash = newPassword;
     userStore.set(emailKey, account);
+    saveUsersToDisk();
     return true;
   },
 
   // ==========================================
-  // LECTURES (USER ISOLATED)
+  // LECTURES (USER ISOLATED & DISK PERSISTED)
   // ==========================================
   getLectures: async (userId?: string): Promise<DemoLectureData[]> => {
-    const all = Array.from(lectureStore.values());
+    // Read from disk to pick up any lectures created across worker processes
+    const all = loadAllLecturesFromDisk();
     if (!userId) return all;
 
     // If demo user, include the initial sample lecture
@@ -121,7 +270,13 @@ export const repo = {
   },
 
   getLectureById: async (id: string, userId?: string): Promise<DemoLectureData | null> => {
-    const lecture = lectureStore.get(id);
+    if (!id || id === "undefined") return null;
+
+    let lecture = lectureStore.get(id);
+    if (!lecture) {
+      // Check disk in case it was written by another worker process or prior session
+      lecture = loadLectureFromDisk(id) || undefined;
+    }
     if (!lecture) return null;
 
     // Check ownership if userId provided
@@ -142,16 +297,19 @@ export const repo = {
       userId: userId || data.userId || "demo-user-id",
     };
     lectureStore.set(toSave.id, toSave);
+    saveLectureToDisk(toSave);
     return toSave;
   },
 
   deleteLecture: async (id: string, userId?: string): Promise<boolean> => {
-    const lecture = lectureStore.get(id);
+    const lecture = lectureStore.get(id) || loadLectureFromDisk(id);
     if (!lecture) return false;
     if (userId && lecture.userId && lecture.userId !== userId && userId !== "demo-user-id") {
       return false;
     }
-    return lectureStore.delete(id);
+    lectureStore.delete(id);
+    deleteLectureFromDisk(id);
+    return true;
   },
 
   // ==========================================
@@ -186,7 +344,7 @@ export const repo = {
     cardId: string,
     updates: Partial<DemoLectureData["cards"][0]>
   ): Promise<DemoLectureData["cards"][0] | null> => {
-    const lecture = lectureStore.get(lectureId);
+    const lecture = lectureStore.get(lectureId) || loadLectureFromDisk(lectureId);
     if (!lecture) return null;
     const cardIndex = lecture.cards.findIndex((c) => c.id === cardId);
     if (cardIndex === -1) return null;
@@ -196,6 +354,7 @@ export const repo = {
       ...updates,
     };
     lectureStore.set(lectureId, lecture);
+    saveLectureToDisk(lecture);
     return lecture.cards[cardIndex];
   },
 
@@ -203,7 +362,7 @@ export const repo = {
     lectureId: string,
     card: Omit<DemoLectureData["cards"][0], "id">
   ): Promise<DemoLectureData["cards"][0] | null> => {
-    const lecture = lectureStore.get(lectureId);
+    const lecture = lectureStore.get(lectureId) || loadLectureFromDisk(lectureId);
     if (!lecture) return null;
     const newCard = {
       ...card,
@@ -211,14 +370,16 @@ export const repo = {
     };
     lecture.cards.push(newCard);
     lectureStore.set(lectureId, lecture);
+    saveLectureToDisk(lecture);
     return newCard;
   },
 
   deleteCard: async (lectureId: string, cardId: string): Promise<boolean> => {
-    const lecture = lectureStore.get(lectureId);
+    const lecture = lectureStore.get(lectureId) || loadLectureFromDisk(lectureId);
     if (!lecture) return false;
     lecture.cards = lecture.cards.filter((c) => c.id !== cardId);
     lectureStore.set(lectureId, lecture);
+    saveLectureToDisk(lecture);
     return true;
   },
 
@@ -227,11 +388,12 @@ export const repo = {
     concepts: DemoLectureData["concepts"],
     conceptEdges: DemoLectureData["conceptEdges"]
   ): Promise<boolean> => {
-    const lecture = lectureStore.get(lectureId);
+    const lecture = lectureStore.get(lectureId) || loadLectureFromDisk(lectureId);
     if (!lecture) return false;
     lecture.concepts = concepts;
     lecture.conceptEdges = conceptEdges;
     lectureStore.set(lectureId, lecture);
+    saveLectureToDisk(lecture);
     return true;
   },
 
@@ -246,10 +408,12 @@ export const repo = {
       reviewedAt: new Date().toISOString(),
     };
     reviewLogs.push(entry);
+    saveReviewsToDisk();
     return entry;
   },
 
   getReviewLogs: async (userId?: string): Promise<ReviewLog[]> => {
+    loadReviewsFromDisk();
     if (!userId) return [...reviewLogs];
     return reviewLogs.filter((r) => r.userId === userId || (!r.userId && userId === "demo-user-id"));
   },

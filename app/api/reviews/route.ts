@@ -3,6 +3,9 @@ import { repo } from "@/lib/db/repo";
 import { scheduleReview } from "@/lib/fsrs/scheduler";
 import type { FSRSRating } from "@/lib/fsrs/scheduler";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { lectureId, cardId, rating, reviewDurationMs = 0 } = body;

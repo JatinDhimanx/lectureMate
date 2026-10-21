@@ -26,16 +26,57 @@ export default function LectureDetailPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [editingCard, setEditingCard] = useState<DemoLectureData["cards"][0] | null | undefined>(undefined);
 
+  const rawId = params?.id;
+  const lectureId = typeof rawId === "string" ? rawId : Array.isArray(rawId) ? (rawId[0] ?? "") : "";
+
   useEffect(() => {
-    async function load() {
+    if (!lectureId || lectureId === "undefined") return;
+
+    let isCancelled = false;
+    const currentId = lectureId;
+
+    async function load(retryCount = 0) {
       try {
-        const res = await fetch(`/api/lectures/${params.id}`);
-        if (res.ok) setLecture(await res.json());
-      } catch {}
-      setLoading(false);
+        const res = await fetch(`/api/lectures/${encodeURIComponent(currentId)}`, {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled) {
+            setLecture(data);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // If newly generated lecture is finishing write, retry up to 3 times
+        if (res.status === 404 && retryCount < 3) {
+          setTimeout(() => {
+            if (!isCancelled) load(retryCount + 1);
+          }, 600);
+          return;
+        }
+      } catch {
+        if (retryCount < 2) {
+          setTimeout(() => {
+            if (!isCancelled) load(retryCount + 1);
+          }, 600);
+          return;
+        }
+      }
+
+      if (!isCancelled) {
+        setLoading(false);
+      }
     }
+
+    setLoading(true);
     load();
-  }, [params.id]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [lectureId]);
 
   if (loading) {
     return (

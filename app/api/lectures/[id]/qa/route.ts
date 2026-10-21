@@ -3,6 +3,9 @@ import { generateText } from "ai";
 import { getFlashModel, isGeminiConfigured } from "@/lib/ai/gemini";
 import { repo } from "@/lib/db/repo";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const { lectureId, question } = await request.json();
