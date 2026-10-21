@@ -19,6 +19,12 @@ function sseEvent(event: string, data: object) {
 
 export async function POST(request: NextRequest) {
   const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized. Please log in first." }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const encoder = new TextEncoder();
 
   const readable = new ReadableStream({

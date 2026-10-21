@@ -63,6 +63,7 @@ CLASSIFICATION & STRICT CODE-TRACING RULES:
    - Process / Workflow → "Explain the sequence or role of X in Y"
    - Conceptual mechanics → "Why / How does X work?"
    - Code Tracing → Only when actual runnable code is provided.
+4. HIGH-YIELD ACADEMIC SUBJECT MATTER ONLY: Generate cards ONLY for core questions, definitions, mechanisms, derivations, problem-solving, and essential conceptual points. Strictly EXCLUDE meta-exam noise: NEVER create flashcards about exam pattern, marks weightage (e.g., 'how many marks will come'), paper format, grading schemes, or administrative exam instructions.
 
 BLOOM FOCUS: ${bloomFocus.join(", ")}
 CARD TYPES: ${cardTypes.join(", ")}

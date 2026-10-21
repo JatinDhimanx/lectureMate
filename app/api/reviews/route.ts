@@ -3,10 +3,17 @@ import { repo } from "@/lib/db/repo";
 import { scheduleReview } from "@/lib/fsrs/scheduler";
 import type { FSRSRating } from "@/lib/fsrs/scheduler";
 
+import { getCurrentUser } from "@/lib/auth/get-current-user";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const { lectureId, cardId, rating, reviewDurationMs = 0 } = body;
 
@@ -14,9 +21,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "lectureId, cardId, and rating are required" }, { status: 400 });
   }
 
-  const lecture = await repo.getLectureById(lectureId);
+  const lecture = await repo.getLectureById(lectureId, user.id);
   if (!lecture) {
-    return NextResponse.json({ error: "Lecture not found" }, { status: 404 });
+    return NextResponse.json({ error: "Lecture not found or access denied" }, { status: 404 });
   }
 
   const card = lecture.cards.find((c) => c.id === cardId);

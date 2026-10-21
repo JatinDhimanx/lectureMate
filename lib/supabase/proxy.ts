@@ -45,10 +45,12 @@ export async function updateSession(request: NextRequest) {
   const protectedPaths = ["/dashboard", "/upload", "/study", "/quiz", "/lectures", "/map", "/settings"];
   const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
-  // Check demo session cookie fallback if user authenticated via demo/mock
+  // Check session cookie fallback
+  const sessionCookie = request.cookies.get("lm_session")?.value;
   const demoAuthCookie = request.cookies.get("demo_auth_user")?.value;
+  const isAuthenticated = Boolean(user || sessionCookie || demoAuthCookie);
 
-  if (isProtected && !user && !demoAuthCookie) {
+  if (isProtected && !isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     url.searchParams.set("redirectTo", pathname);
@@ -56,7 +58,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // If user is logged in and visits /auth/login or /auth/signup, redirect to /dashboard
-  if ((user || demoAuthCookie) && (pathname === "/auth/login" || pathname === "/auth/signup")) {
+  if (isAuthenticated && (pathname === "/auth/login" || pathname === "/auth/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

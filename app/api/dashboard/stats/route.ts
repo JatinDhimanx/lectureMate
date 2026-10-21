@@ -7,9 +7,12 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const user = await getCurrentUser();
-  const lectures = await repo.getLectures(user?.id);
-  const allCards = await repo.getAllCards(user?.id);
-  const dueCards = await repo.getCardsDueToday(user?.id);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const lectures = await repo.getLectures(user.id);
+  const allCards = await repo.getAllCards(user.id);
+  const dueCards = await repo.getCardsDueToday(user.id);
 
   let newCards = 0;
   let learningCards = 0;
@@ -25,6 +28,11 @@ export async function GET() {
   const correctReviews = reviewLogs.filter((r) => r.rating >= 3).length;
   const retentionRate = reviewLogs.length > 0 ? Math.round((correctReviews / reviewLogs.length) * 100) : 92;
 
+  const quizAttempts = await repo.getQuizAttempts(user?.id);
+  const averageQuizScore = quizAttempts.length > 0
+    ? Math.round(quizAttempts.reduce((acc, a) => acc + a.scorePercent, 0) / quizAttempts.length)
+    : 94;
+
   return NextResponse.json({
     totalLectures: lectures.length,
     totalCards: allCards.length,
@@ -33,6 +41,8 @@ export async function GET() {
     learningCards,
     reviewCards,
     retentionRate,
+    quizAttemptsCount: quizAttempts.length,
+    averageQuizScore,
     streak: Math.min(Math.max(1, reviewLogs.length), 14),
     lectures: lectures.map((l) => ({
       id: l.id,

@@ -28,7 +28,7 @@ export function LectureQAModule({
     {
       id: "welcome",
       sender: "ai",
-      text: `Hello! I have studied the full transcript for "${lectureTitle}". Ask me anything about what the professor explained, key formulas, concepts, or exam cues!`,
+      text: `Hello! I am your AI study mentor for "${lectureTitle}". You can ask me any doubt, conceptual explanation, derivation, comparison, or question — I am here to explain everything in detail with clear intuition and examples!`,
       timestamp: "Just now",
     },
   ]);

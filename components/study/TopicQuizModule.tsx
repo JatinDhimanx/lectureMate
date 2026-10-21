@@ -138,9 +138,10 @@ export function TopicQuizModule({
           )}
           <Link
             href={`/quiz/${lectureId}`}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-sm shadow-amber-500/20 hover:shadow-md transition-all"
           >
-            <span>Full Quiz Mode</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Full Proctored Quiz Mode</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </Link>
         </div>

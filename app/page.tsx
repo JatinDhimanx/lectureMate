@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   BookOpen,
+  LayoutDashboard,
   Sparkles,
   ArrowRight,
   Play,
@@ -416,25 +417,74 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"file" | "youtube" | "paste">("file");
+  const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email?: string } | null>(null);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            setCurrentUser(data.user);
+          }
+        }
+      } catch {}
+    }
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDemoModalOpen(false);
+    };
+    if (demoModalOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
+    };
+  }, [demoModalOpen]);
+
+  const userInitial = (
+    currentUser?.name?.trim().charAt(0) ||
+    currentUser?.email?.trim().charAt(0) ||
+    "U"
+  ).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] font-sans overflow-x-hidden relative">
+      {/* Ambient gradient blobs extending seamlessly behind floating navbar all the way to top */}
+      <div className="absolute top-0 -left-40 w-[700px] h-[700px] bg-indigo-200/35 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 right-0 w-[550px] h-[550px] bg-purple-200/30 rounded-full blur-3xl pointer-events-none" />
 
       {/* ═══════════════════════════════════════════════════════════════════
-          NAVBAR — sticky, Odoo-style clean white with border
+          NAVBAR — Floating Rounded Pill Layout with Glassmorphism
       ═══════════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-lg border-b border-slate-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-[68px] flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+      <header className="sticky top-3 sm:top-5 z-50 px-4 sm:px-6 w-full max-w-7xl mx-auto transition-all duration-300">
+        <div className="rounded-full bg-white/80 backdrop-blur-xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04),0_1px_3px_rgb(0,0,0,0.02)] hover:shadow-[0_12px_36px_rgb(0,0,0,0.07)] px-4 sm:px-6 py-2.5 flex items-center justify-between transition-all">
+          {/* Brand Logo */}
+          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
               <BookOpen className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
             </div>
-            <span className="font-extrabold text-xl text-[#0F172A] tracking-tight">LectureMate</span>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">LectureMate</span>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50/80 text-indigo-700 border border-indigo-100/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                AI
+              </span>
+            </div>
           </Link>
 
-          {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-1">
+          {/* Desktop Navigation Links */}
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100/70 p-1 rounded-full border border-slate-200/40 backdrop-blur-xs">
             {[
               { label: "Features", href: "#features" },
               { label: "How It Works", href: "#how-it-works" },
@@ -446,53 +496,130 @@ export default function LandingPage() {
               <Link
                 key={n.label}
                 href={n.href}
-                className="px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-white rounded-full transition-all shadow-none hover:shadow-xs"
               >
                 {n.label}
               </Link>
             ))}
           </nav>
 
-          {/* CTA Buttons */}
-          <div className="hidden lg:flex items-center gap-3">
-            <Link href="/auth/login" className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors">
-              Sign In
-            </Link>
-            <Link
-              href="/auth/login"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-sm shadow-lg shadow-indigo-500/25 transition-all hover:-translate-y-0.5 hover:shadow-indigo-500/35"
-            >
-              Get Started Free
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+          {/* CTA Buttons - Reactive to User Login State */}
+          <div className="hidden lg:flex items-center gap-2.5">
+            {currentUser ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  title={`${currentUser.name || currentUser.email} — Profile & Dashboard`}
+                  className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-700 to-purple-600 text-white font-bold text-xs flex items-center justify-center shadow-sm shadow-indigo-500/25 ring-2 ring-white hover:scale-105 active:scale-95 transition-all"
+                >
+                  {userInitial}
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1.5 px-4.5 py-2 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-xs shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span>Dashboard</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/auth/login"
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-indigo-600 hover:bg-slate-100/70 rounded-full transition-all"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/login"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-xs shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span>Get Started Free</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </>
+            )}
           </div>
 
-          {/* Mobile Hamburger */}
+          {/* Mobile Hamburger Toggle */}
           <button
-            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+            className="lg:hidden p-2 rounded-full hover:bg-slate-100 text-slate-700 transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Floating Mobile Dropdown Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="lg:hidden border-t border-slate-100 bg-white px-6 py-4 space-y-1"
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="lg:hidden mt-2 p-4 rounded-3xl bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-2xl space-y-2"
             >
-              {["Features", "How It Works", "FAQ"].map((l) => (
-                <Link key={l} href={`#${l.toLowerCase().replace(" ", "-")}`} onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-sm font-medium text-slate-700 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors">
-                  {l}
-                </Link>
-              ))}
-              <div className="pt-3 flex flex-col gap-2">
-                <Link href="/auth/login" className="px-4 py-2.5 text-center text-sm font-semibold text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Sign In</Link>
-                <Link href="/auth/login" className="px-4 py-2.5 text-center text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors">Get Started Free</Link>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { label: "Features", href: "#features" },
+                  { label: "How It Works", href: "#how-it-works" },
+                  { label: "Flashcards", href: "#flashcards" },
+                  { label: "Quizzes", href: "#quizzes" },
+                  { label: "Concept Maps", href: "#maps" },
+                  { label: "FAQ", href: "#faq" },
+                ].map((l) => (
+                  <Link
+                    key={l.label}
+                    href={l.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+              <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                {currentUser ? (
+                  <>
+                    <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-50/80 rounded-2xl border border-slate-100">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-700 to-purple-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                        {userInitial}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-slate-800 truncate">{currentUser.name || "Student"}</span>
+                        <span className="text-[10px] text-slate-400 truncate">{currentUser.email}</span>
+                      </div>
+                    </div>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-4 py-2.5 text-center text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5" />
+                      <span>Dashboard</span>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-4 py-2.5 text-center text-xs font-semibold text-slate-700 border border-slate-200 rounded-full hover:bg-slate-50 transition-colors"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-4 py-2.5 text-center text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-500/20 transition-all"
+                    >
+                      Get Started Free
+                    </Link>
+                  </>
+                )}
               </div>
             </motion.div>
           )}
@@ -502,7 +629,7 @@ export default function LandingPage() {
       {/* ═══════════════════════════════════════════════════════════════════
           HERO — Odoo-style: big headline left, interactive mockup right
       ═══════════════════════════════════════════════════════════════════ */}
-      <section id="home" className="relative overflow-hidden">
+      <section id="home" className="relative">
         {/* Ambient blobs */}
         <div className="absolute -top-40 -left-40 w-[700px] h-[700px] bg-indigo-200/30 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-20 right-0 w-[500px] h-[500px] bg-purple-200/25 rounded-full blur-3xl pointer-events-none" />
@@ -553,13 +680,19 @@ export default function LandingPage() {
                 Start For Free
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2.5 px-7 py-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-base shadow-sm transition-all hover:border-slate-300"
+              <button
+                type="button"
+                onClick={() => {
+                  setVideoError(false);
+                  setDemoModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2.5 px-7 py-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-base shadow-sm transition-all hover:border-slate-300 hover:-translate-y-0.5 active:translate-y-0"
               >
-                <Play className="w-4 h-4 text-indigo-600" />
-                Live Demo
-              </Link>
+                <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Play className="w-3.5 h-3.5 fill-indigo-600 text-indigo-600 ml-0.5" />
+                </div>
+                <span>Watch Demo</span>
+              </button>
             </motion.div>
 
             {/* Social proof */}
@@ -1138,12 +1271,17 @@ export default function LandingPage() {
                 Upload Your First Lecture
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link
-                href="/dashboard"
+              <button
+                type="button"
+                onClick={() => {
+                  setVideoError(false);
+                  setDemoModalOpen(true);
+                }}
                 className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/25 text-white font-bold text-lg transition-all"
               >
-                Explore Demo Dashboard
-              </Link>
+                <Play className="w-5 h-5 fill-white text-white" />
+                Watch Demo Video
+              </button>
             </motion.div>
             <motion.p variants={fadeUp} className="mt-8 text-indigo-300 text-sm font-medium">
               Free forever · No credit card · No account required to try
@@ -1231,6 +1369,116 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          DEMO VIDEO POPUP MODAL (No Login / Signup Required)
+      ═══════════════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {demoModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 md:p-10">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDemoModalOpen(false)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+            />
+
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
+              className="relative w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                    <Play className="w-4 h-4 fill-white text-white ml-0.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-sm sm:text-base leading-snug">
+                      LectureMate Product Tour & Walkthrough
+                    </h3>
+                    <p className="text-slate-400 text-xs">
+                      Watch how AI turns 3-hour lectures into verified flashcards & quizzes
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setDemoModalOpen(false)}
+                  className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors border border-slate-700/60"
+                  aria-label="Close modal"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Video Player Area */}
+              <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+                <video
+                  src="/demo-video.mp4"
+                  autoPlay
+                  controls
+                  playsInline
+                  onError={() => setVideoError(true)}
+                  className="w-full h-full object-contain"
+                >
+                  Your browser does not support HTML5 video.
+                </video>
+
+                {videoError && (
+                  <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-3">
+                      <Play className="w-6 h-6 fill-indigo-400 text-indigo-400 ml-0.5" />
+                    </div>
+                    <h4 className="text-white font-bold text-base mb-1">Demo Video File Setup</h4>
+                    <p className="text-slate-400 text-xs max-w-md mb-4 leading-relaxed">
+                      Apni demo video ko is path par paste karein:
+                      <br />
+                      <code className="text-indigo-400 font-mono bg-slate-900 px-2.5 py-1 rounded-md text-xs border border-slate-800 inline-block mt-2 font-bold">
+                        public/demo-video.mp4
+                      </code>
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href="/upload"
+                        onClick={() => setDemoModalOpen(false)}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-xs hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-500/25 transition-all"
+                      >
+                        Try Live App Now
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Banner */}
+              <div className="px-5 sm:px-6 py-3.5 bg-slate-950/60 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="text-slate-400 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Video Location: <code className="text-slate-300 font-mono">public/demo-video.mp4</code></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/upload"
+                    onClick={() => setDemoModalOpen(false)}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors"
+                  >
+                    <span>Try With Your Lecture</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

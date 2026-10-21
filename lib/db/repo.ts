@@ -3,6 +3,8 @@ import path from "path";
 import os from "os";
 import { SAMPLE_LECTURE_DATA, DemoLectureData } from "./mock-data";
 
+import { hashPassword, verifyPassword } from "@/lib/auth/security";
+
 export interface ReviewLog {
   id: string;
   userId?: string;
@@ -15,9 +17,38 @@ export interface ReviewLog {
 export interface UserAccount {
   id: string;
   email: string;
-  passwordHash: string; // Plain/hashed password for local verification
+  passwordHash: string; // Cryptographically hashed password
   fullName: string;
+  passwordResetAt?: string; // New column tracking password reset
+  lastLoginAt?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface QuizAttemptLog {
+  id: string;
+  userId?: string;
+  lectureId: string;
+  lectureTitle: string;
+  totalQuestions: number;
+  correctAnswers: number;
+  scorePercent: number;
+  timeSpentSeconds: number;
+  violationsCount: number;
+  terminated: boolean;
+  terminationReason?: string;
+  selectedTopics: string[];
+  difficulty: "easy" | "medium" | "hard";
+  attemptedAt: string;
+  questionResults: Array<{
+    questionId: string;
+    prompt: string;
+    selectedOptionId: string | null;
+    correctOptionId: string;
+    isCorrect: boolean;
+    explanation: string;
+    bloomLevel?: string;
+  }>;
 }
 
 // Global in-memory storage preserved across Next.js dev server hot-module-reloads
@@ -25,6 +56,7 @@ const globalForRepo = globalThis as unknown as {
   lectureStore: Map<string, DemoLectureData>;
   reviewLogs: ReviewLog[];
   userStore: Map<string, UserAccount>;
+  quizAttempts: QuizAttemptLog[];
 };
 
 const lectureStore: Map<string, DemoLectureData> =
@@ -33,6 +65,8 @@ const reviewLogs: ReviewLog[] =
   globalForRepo.reviewLogs || (globalForRepo.reviewLogs = []);
 const userStore: Map<string, UserAccount> =
   globalForRepo.userStore || (globalForRepo.userStore = new Map());
+const quizAttempts: QuizAttemptLog[] =
+  globalForRepo.quizAttempts || (globalForRepo.quizAttempts = []);
 
 // Local filesystem persistence directory (uses /tmp on Vercel/serverless environments)
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -42,6 +76,7 @@ const DATA_DIR = isServerless
 const LECTURES_DIR = path.join(DATA_DIR, "lectures");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const REVIEWS_FILE = path.join(DATA_DIR, "reviews.json");
+const QUIZ_ATTEMPTS_FILE = path.join(DATA_DIR, "quiz_attempts.json");
 
 function ensureDirs() {
   try {
@@ -161,6 +196,22 @@ function loadReviewsFromDisk() {
   }
 }
 
+function loadQuizAttemptsFromDisk() {
+  try {
+    ensureDirs();
+    if (fs.existsSync(QUIZ_ATTEMPTS_FILE)) {
+      const content = fs.readFileSync(QUIZ_ATTEMPTS_FILE, "utf-8");
+      const list = JSON.parse(content) as QuizAttemptLog[];
+      if (Array.isArray(list)) {
+        quizAttempts.length = 0;
+        quizAttempts.push(...list);
+      }
+    }
+  } catch (err) {
+    console.warn("[repo] Error loading quiz attempts from disk:", err);
+  }
+}
+
 function saveReviewsToDisk() {
   try {
     ensureDirs();
@@ -170,10 +221,20 @@ function saveReviewsToDisk() {
   }
 }
 
+function saveQuizAttemptsToDisk() {
+  try {
+    ensureDirs();
+    fs.writeFileSync(QUIZ_ATTEMPTS_FILE, JSON.stringify(quizAttempts, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[repo] Error saving quiz attempts to disk:", err);
+  }
+}
+
 // Initial hydration from disk
 ensureDirs();
 loadUsersFromDisk();
 loadReviewsFromDisk();
+loadQuizAttemptsFromDisk();
 loadAllLecturesFromDisk();
 
 // Seed sample lecture for demo session if empty
@@ -207,12 +268,14 @@ export const repo = {
   }): Promise<UserAccount> => {
     const emailKey = user.email.toLowerCase().trim();
     const hexId = Buffer.from(emailKey).toString("hex").slice(0, 16);
+    const now = new Date().toISOString();
     const account: UserAccount = {
       id: `usr_${hexId}`,
       email: emailKey,
-      passwordHash: user.password,
+      passwordHash: hashPassword(user.password),
       fullName: user.fullName || emailKey.split("@")[0],
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     userStore.set(emailKey, account);
     saveUsersToDisk();
@@ -225,11 +288,26 @@ export const repo = {
     return account ? JSON.parse(JSON.stringify(account)) : null;
   },
 
+  findUserById: async (id: string): Promise<UserAccount | null> => {
+    loadUsersFromDisk();
+    for (const acc of userStore.values()) {
+      if (acc.id === id) {
+        return JSON.parse(JSON.stringify(acc));
+      }
+    }
+    return null;
+  },
+
   verifyUserPassword: async (email: string, password: string): Promise<UserAccount | null> => {
     loadUsersFromDisk();
-    const account = userStore.get(email.toLowerCase().trim());
+    const emailKey = email.toLowerCase().trim();
+    const account = userStore.get(emailKey);
     if (!account) return null;
-    if (account.passwordHash === password) {
+
+    if (verifyPassword(password, account.passwordHash)) {
+      account.lastLoginAt = new Date().toISOString();
+      userStore.set(emailKey, account);
+      saveUsersToDisk();
       return JSON.parse(JSON.stringify(account));
     }
     return null;
@@ -239,18 +317,27 @@ export const repo = {
     const emailKey = email.toLowerCase().trim();
     loadUsersFromDisk();
     const account = userStore.get(emailKey);
+    const now = new Date().toISOString();
+    const hashed = hashPassword(newPassword);
+
     if (!account) {
+      const hexId = Buffer.from(emailKey).toString("hex").slice(0, 16);
       userStore.set(emailKey, {
-        id: `usr_${Buffer.from(emailKey).toString("hex").slice(0, 16)}`,
+        id: `usr_${hexId}`,
         email: emailKey,
-        passwordHash: newPassword,
+        passwordHash: hashed,
         fullName: emailKey.split("@")[0],
-        createdAt: new Date().toISOString(),
+        passwordResetAt: now,
+        createdAt: now,
+        updatedAt: now,
       });
       saveUsersToDisk();
       return true;
     }
-    account.passwordHash = newPassword;
+
+    account.passwordHash = hashed;
+    account.passwordResetAt = now;
+    account.updatedAt = now;
     userStore.set(emailKey, account);
     saveUsersToDisk();
     return true;
@@ -420,5 +507,36 @@ export const repo = {
     loadReviewsFromDisk();
     if (!userId) return [...reviewLogs];
     return reviewLogs.filter((r) => r.userId === userId || (!r.userId && userId === "demo-user-id"));
+  },
+
+  // ==========================================
+  // QUIZ ATTEMPTS & ANALYTICS
+  // ==========================================
+  logQuizAttempt: async (
+    attempt: Omit<QuizAttemptLog, "id" | "attemptedAt">,
+    userId?: string
+  ): Promise<QuizAttemptLog> => {
+    loadQuizAttemptsFromDisk();
+    const entry: QuizAttemptLog = {
+      ...attempt,
+      id: "qa-" + Math.random().toString(36).substring(2, 9),
+      userId: userId || attempt.userId || "demo-user-id",
+      attemptedAt: new Date().toISOString(),
+    };
+    quizAttempts.unshift(entry);
+    saveQuizAttemptsToDisk();
+    return entry;
+  },
+
+  getQuizAttempts: async (userId?: string, lectureId?: string): Promise<QuizAttemptLog[]> => {
+    loadQuizAttemptsFromDisk();
+    let list = [...quizAttempts];
+    if (userId) {
+      list = list.filter((a) => a.userId === userId || (!a.userId && userId === "demo-user-id"));
+    }
+    if (lectureId) {
+      list = list.filter((a) => a.lectureId === lectureId);
+    }
+    return list;
   },
 };

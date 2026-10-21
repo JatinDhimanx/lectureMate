@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const trimmedEmail = email.trim().toLowerCase();
     const origin = request.nextUrl.origin;
 
-    // Trigger Supabase password recovery email
+    // Trigger Supabase password recovery email if configured
     try {
       const supabase = await createClient();
       await supabase.auth.resetPasswordForEmail(trimmedEmail, {
@@ -25,12 +25,9 @@ export async function POST(request: NextRequest) {
       // ignore
     }
 
-    const resetUrl = `${origin}/auth/reset-password?email=${encodeURIComponent(trimmedEmail)}`;
-
     return NextResponse.json({
       success: true,
-      resetUrl,
-      message: `If an account with ${trimmedEmail} exists, password reset instructions have been prepared. You can check your inbox or reset directly below.`,
+      message: `If an account with ${trimmedEmail} exists, password reset instructions have been sent to your email inbox.`,
     });
   } catch (err: unknown) {
     const message =

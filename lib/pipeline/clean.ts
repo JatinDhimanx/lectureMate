@@ -48,15 +48,15 @@ INSTRUCTIONS:
 3. Fix run-on sentences. Add punctuation where the speaker pauses logically.
 4. Correct technical terminology (e.g., capitalize proper nouns like "Paxos", "CAP Theorem", "FSRS").
 5. ${langInstruction}
-6. CRITICAL: Do NOT paraphrase or change the meaning of any passage. Do NOT summarize or remove technical content.
-7. Preserve all exam cues and emphasis markers ("important", "remember this", "will come in exam").
+6. CRITICAL - 100% COMPLETE GRANULAR DETAIL PRESERVATION: Do NOT summarize, shorten, compress, truncate, or omit ANY part of what the speaker said. The transcript must be completely detailed down to the smallest explanation, nuance, step, sub-point, formula, question discussed, and minor point. Every single section must be retained in full depth without paraphrasing away technical details.
+7. Preserve all conceptual emphasis markers and important topic tags.
 
 RAW TRANSCRIPT:
 ---
 ${rawTranscript}
 ---
 
-Return a JSON object matching the schema: cleanedText, detectedLanguage, summary (2-3 sentences), wordCount.`,
+Return a JSON object matching the schema: cleanedText, detectedLanguage, summary (comprehensive overview of all core topics), wordCount.`,
       maxRetries: 2,
     });
 

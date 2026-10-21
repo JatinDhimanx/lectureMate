@@ -7,7 +7,10 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const user = await getCurrentUser();
-  const lectures = await repo.getLectures(user?.id);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const lectures = await repo.getLectures(user.id);
   return NextResponse.json(
     lectures.map((l) => ({
       id: l.id,

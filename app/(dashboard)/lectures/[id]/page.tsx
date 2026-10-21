@@ -58,27 +58,30 @@ export default function LectureDetailPage() {
         const res = await fetch(`/api/lectures/${encodeURIComponent(currentId)}`, {
           cache: "no-store",
         });
+
+        if (res.status === 401) {
+          window.location.href = `/auth/login?redirectTo=/lectures/${encodeURIComponent(currentId)}`;
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           if (!isCancelled) {
             setLecture(data);
             setLoading(false);
-            try {
-              localStorage.setItem(`lecture_${currentId}`, JSON.stringify(data));
-            } catch {}
           }
           return;
         }
 
-        // If newly generated lecture is finishing write, retry up to 3 times
-        if (res.status === 404 && retryCount < 3) {
+        // Retry only for 404 during live processing pipeline write
+        if (res.status === 404 && retryCount < 2) {
           setTimeout(() => {
             if (!isCancelled) load(retryCount + 1);
           }, 600);
           return;
         }
       } catch {
-        if (retryCount < 2) {
+        if (retryCount < 1) {
           setTimeout(() => {
             if (!isCancelled) load(retryCount + 1);
           }, 600);
@@ -86,19 +89,8 @@ export default function LectureDetailPage() {
         }
       }
 
-      // Check localStorage before setting null
       if (!isCancelled) {
-        try {
-          const cached = localStorage.getItem(`lecture_${currentId}`);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed && parsed.id === currentId) {
-              setLecture(parsed);
-              setLoading(false);
-              return;
-            }
-          }
-        } catch {}
+        setLecture(null);
         setLoading(false);
       }
     }

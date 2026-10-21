@@ -44,17 +44,17 @@ RULES:
 1. Each concept must be a single, discrete, learnable idea (not a broad topic).
 2. Definition: concise, high-yield, 1-3 sentences suitable for a flashcard back.
 3. importanceScore: 0.0-1.0. Boost by:
-   - Explicit exam cues ("important", "will be on the exam") → +0.3
    - Repeated mentions across sections → +0.15 each repetition
    - Long detailed explanation → +0.1
    - Core definitional concept → base 0.6
-4. examCue: true if the speaker explicitly flagged this concept with an exam or emphasis cue.
+4. examCue: true if the speaker explicitly flagged this core academic concept as important.
 5. sourceSpan.quote: VERBATIM sentence from the transcript that introduces or defines the concept.
    ⚠️ CRITICAL: The quote MUST exist EXACTLY in the transcript. Do not paraphrase.
 6. prerequisites: list names of other concepts from THIS lecture that must be understood first.
 7. Extract 5-15 concepts depending on transcript length.
+8. CRITICAL - NO EXAM PATTERN OR MARKS FLUFF: Focus EXCLUSIVELY on core subject matter, definitions, theorems, formulas, algorithms, mechanisms, and key points. Do NOT extract administrative or exam-meta details such as "marks allocation", "question paper pattern", "5 marks question", "scheme of examination", "grading criteria", or course logistics.
 
-${examCueDetected ? "⚠️ EXAM CUES DETECTED: This transcript contains explicit emphasis markers. Flag relevant concepts with examCue=true.\n" : ""}
+${examCueDetected ? "⚠️ EXAM CUES DETECTED: This transcript contains explicit emphasis markers. Flag relevant subject-matter concepts with examCue=true.\n" : ""}
 
 SECTIONS:
 ${sections.map((s, i) => `Section ${i + 1}: "${s.title}" (chars ${s.startChar}-${s.endChar})`).join("\n")}
@@ -66,35 +66,39 @@ ${cleanedText}
       maxRetries: 1,
     });
 
-    // Post-process: programmatically verify sourceSpan quotes
-    const verifiedConcepts: ExtractedConcept[] = result.object.concepts.map((c) => {
-      const quoteFound = cleanedText.includes(c.sourceSpan.quote);
-      if (!quoteFound) {
-        const firstWords = c.sourceSpan.quote.split(" ").slice(0, 6).join(" ");
-        const idx = cleanedText.indexOf(firstWords);
-        if (idx !== -1) {
-          return {
-            ...c,
-            sourceSpan: {
-              ...c.sourceSpan,
-              startChar: idx,
-              endChar: idx + c.sourceSpan.quote.length,
-            },
-          };
-        }
-      }
-      const idx = cleanedText.indexOf(c.sourceSpan.quote);
-      return {
-        ...c,
-        sourceSpan: {
-          ...c.sourceSpan,
-          startChar: idx >= 0 ? idx : 0,
-          endChar: idx >= 0 ? idx + c.sourceSpan.quote.length : 0,
-        },
-      };
-    });
+    const META_EXAM_REGEX = /\b(marks?(\s+allocation|\s+scheme|\s+weightage)?|exam\s+pattern|paper\s+pattern|marking\s+scheme|grading\s+system|syllabus\s+breakdown|section\s+[A-D]\s+pattern|sample\s+paper)\b/i;
 
-    return { concepts: verifiedConcepts };
+    // Post-process: programmatically verify sourceSpan quotes and filter meta-exam noise
+    const verifiedConcepts: ExtractedConcept[] = result.object.concepts
+      .filter((c) => !META_EXAM_REGEX.test(c.name) && !META_EXAM_REGEX.test(c.definition))
+      .map((c) => {
+        const quoteFound = cleanedText.includes(c.sourceSpan.quote);
+        if (!quoteFound) {
+          const firstWords = c.sourceSpan.quote.split(" ").slice(0, 6).join(" ");
+          const idx = cleanedText.indexOf(firstWords);
+          if (idx !== -1) {
+            return {
+              ...c,
+              sourceSpan: {
+                ...c.sourceSpan,
+                startChar: idx,
+                endChar: idx + c.sourceSpan.quote.length,
+              },
+            };
+          }
+        }
+        const idx = cleanedText.indexOf(c.sourceSpan.quote);
+        return {
+          ...c,
+          sourceSpan: {
+            ...c.sourceSpan,
+            startChar: idx >= 0 ? idx : 0,
+            endChar: idx >= 0 ? idx + c.sourceSpan.quote.length : 0,
+          },
+        };
+      });
+
+    return { concepts: verifiedConcepts.length > 0 ? verifiedConcepts : result.object.concepts };
   } catch (err) {
     console.warn("Gemini extractConcepts error, using fallback concepts:", err);
     return mockExtractConcepts(cleanedText);
