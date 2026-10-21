@@ -49,10 +49,22 @@ function LoginForm() {
 
   useEffect(() => {
     const verified = searchParams.get("verified");
+    const reset = searchParams.get("reset");
+    const emailParam = searchParams.get("email");
+
+    if (emailParam) {
+      setLoginEmail(emailParam);
+    }
+
     if (verified === "error") {
-      setErrorMessage("Verification link expired or invalid. Please request a new link.");
+      setErrorMessage("Verification link expired or invalid. Please sign in or request a new link.");
+      setMode("login");
     } else if (verified === "true") {
-      setSuccessMessage("Email verified successfully! Please sign in with your credentials.");
+      setSuccessMessage("Your email has been verified successfully! Please sign in with your credentials.");
+      setMode("login");
+    } else if (reset === "success") {
+      setSuccessMessage("Password reset successfully! Please sign in with your new password.");
+      setMode("login");
     }
   }, [searchParams]);
 
@@ -125,7 +137,9 @@ function LoginForm() {
       }
 
       if (data.confirmationRequired) {
-        setSuccessMessage("Account created! Please check your email inbox to verify your account.");
+        setSuccessMessage("Account created! A verification link has been sent to your email. Please check your inbox and verify your email before logging in.");
+        setLoginEmail(signupEmail);
+        setMode("login");
         setLoading(false);
       } else {
         setSuccessMessage("Account created successfully! Preparing your dashboard...");
@@ -484,15 +498,6 @@ function LoginForm() {
                     </>
                   )}
                 </button>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 text-center">
-                <Link
-                  href={`/auth/reset-password${forgotEmail ? `?email=${encodeURIComponent(forgotEmail)}` : ""}`}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-                >
-                  Already have a reset token? Set new password →
-                </Link>
               </div>
             </form>
           )}

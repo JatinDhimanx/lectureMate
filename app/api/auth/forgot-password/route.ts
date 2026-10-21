@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     try {
       const supabase = await createClient();
       await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: `${origin}/auth/reset-password`,
+        redirectTo: `${origin}/auth/callback?type=recovery&next=/auth/reset-password`,
       });
     } catch {
       // ignore

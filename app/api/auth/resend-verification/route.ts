@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       type: "signup",
       email: trimmedEmail,
       options: {
-        emailRedirectTo: `${origin}/auth/callback`,
+        emailRedirectTo: `${origin}/auth/callback?type=signup&next=/auth/verified`,
       },
     });
 

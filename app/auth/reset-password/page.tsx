@@ -35,7 +35,9 @@ function ResetPasswordForm() {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!email || !email.includes("@")) {
+    const targetEmail = (email || emailParam).trim().toLowerCase();
+
+    if (!targetEmail || !targetEmail.includes("@")) {
       setErrorMessage("Please specify your account email address.");
       return;
     }
@@ -57,7 +59,7 @@ function ResetPasswordForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim().toLowerCase(),
+          email: targetEmail,
           password,
           confirmPassword,
         }),
@@ -68,13 +70,14 @@ function ResetPasswordForm() {
         throw new Error(data.error || "Failed to reset password.");
       }
 
-      setSuccessMessage("Password reset successfully! Redirecting directly to your dashboard...");
+      setSuccessMessage("Password reset successfully! Redirecting to sign in with your new password...");
 
-      // Smooth direct transition to dashboard
+      // Smooth direct transition to login page
       setTimeout(() => {
-        router.push("/dashboard");
+        const dest = data.redirectTo || `/auth/login?reset=success&email=${encodeURIComponent(targetEmail)}`;
+        router.push(dest);
         router.refresh();
-      }, 1000);
+      }, 1200);
     } catch (err: unknown) {
       setErrorMessage(
         err instanceof Error ? err.message : "Something went wrong."
@@ -107,9 +110,26 @@ function ResetPasswordForm() {
               Reset your password
             </h1>
             <p className="mt-1.5 text-xs text-slate-500">
-              Enter your new credentials to update your account securely
+              Create a new strong password to secure and access your account
             </p>
           </div>
+
+          {/* Account Target Notification Badge */}
+          {emailParam ? (
+            <div className="mb-5 p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-100 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-indigo-700">
+                  Resetting Password For
+                </p>
+                <p className="text-sm font-semibold text-slate-900 truncate">
+                  {emailParam}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <AnimatePresence mode="wait">
             {errorMessage && (
@@ -140,23 +160,25 @@ function ResetPasswordForm() {
           </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Account Email (only editable if not provided in URL) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Account Email
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@university.edu"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
-                />
+            {/* Account Email (shown only if not pre-locked via URL) */}
+            {!emailParam && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Account Email
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="student@university.edu"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* New Password */}
             <div>
@@ -212,7 +234,7 @@ function ResetPasswordForm() {
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <span>Update & Save Password</span>
+                    <span>Save New Password</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

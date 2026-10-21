@@ -49,35 +49,29 @@ export async function POST(request: NextRequest) {
     try {
       const supabase = await createClient();
       await supabase.auth.updateUser({ password });
+      await supabase.auth.signOut();
     } catch {
       // ignore
     }
 
-    // 3. Immediately log in user with fresh secure session token
-    const dbUser = await repo.findUserByEmail(targetEmail);
-    const token = createSessionToken({
-      id: dbUser ? dbUser.id : `usr_${Buffer.from(targetEmail).toString("hex").slice(0, 16)}`,
-      email: targetEmail,
-      fullName: dbUser?.fullName,
-    });
-
     const response = NextResponse.json({
       success: true,
-      message: "Password reset successfully! Your new password is now active in the database.",
-      redirectTo: "/dashboard",
+      message: "Password reset successfully! Please sign in with your new password.",
+      redirectTo: `/auth/login?reset=success&email=${encodeURIComponent(targetEmail)}`,
     });
 
-    response.cookies.set("lm_session", token, {
+    // Clear session cookies so user explicitly logs in with their new password
+    response.cookies.set("lm_session", "", {
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 0,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     });
 
-    response.cookies.set("demo_auth_user", targetEmail, {
+    response.cookies.set("demo_auth_user", "", {
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 0,
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
           data: {
             full_name: fullName || trimmedEmail.split("@")[0],
           },
-          emailRedirectTo: `${origin}/auth/callback`,
+          emailRedirectTo: `${origin}/auth/callback?type=signup&next=/auth/verified`,
         },
       });
 
@@ -86,7 +86,22 @@ export async function POST(request: NextRequest) {
       fullName: fullName || trimmedEmail.split("@")[0],
     });
 
-    // 4. Create secure signed session token
+    // If confirmation is required, do NOT set session cookies. The user must verify email and log in.
+    if (confirmationRequired) {
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.fullName,
+        },
+        confirmationRequired: true,
+        redirectTo: "/auth/login",
+        message: "Account created! A verification link has been sent to your email. Please verify your email before logging in.",
+      });
+    }
+
+    // 4. Create secure signed session token (only when confirmation is not required)
     const token = createSessionToken({
       id: newUser.id,
       email: newUser.email,
@@ -100,11 +115,9 @@ export async function POST(request: NextRequest) {
         email: newUser.email,
         name: newUser.fullName,
       },
-      confirmationRequired,
+      confirmationRequired: false,
       redirectTo: "/dashboard",
-      message: confirmationRequired
-        ? "Account created! Please check your email for the verification link."
-        : "Account created successfully! Preparing your dashboard...",
+      message: "Account created successfully! Preparing your dashboard...",
     });
 
     // Set secure HTTP-only session cookie
