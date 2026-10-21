@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { SAMPLE_LECTURE_DATA, DemoLectureData } from "./mock-data";
 
 export interface ReviewLog {
@@ -33,8 +34,11 @@ const reviewLogs: ReviewLog[] =
 const userStore: Map<string, UserAccount> =
   globalForRepo.userStore || (globalForRepo.userStore = new Map());
 
-// Local filesystem persistence directory (survives dev server restarts and multi-worker isolation)
-const DATA_DIR = path.join(process.cwd(), ".data");
+// Local filesystem persistence directory (uses /tmp on Vercel/serverless environments)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless
+  ? path.join(os.tmpdir(), "lecturemate_data")
+  : path.join(process.cwd(), ".data");
 const LECTURES_DIR = path.join(DATA_DIR, "lectures");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const REVIEWS_FILE = path.join(DATA_DIR, "reviews.json");

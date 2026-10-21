@@ -15,10 +15,14 @@ export function LectureQAModule({
   lectureId,
   lectureTitle,
   suggestedConcepts = [],
+  cleanTranscript,
+  concepts,
 }: {
   lectureId: string;
   lectureTitle: string;
   suggestedConcepts?: string[];
+  cleanTranscript?: string;
+  concepts?: Array<{ name: string; definition: string }>;
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -50,7 +54,13 @@ export function LectureQAModule({
       const res = await fetch(`/api/lectures/${lectureId}/qa`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lectureId, question: q }),
+        body: JSON.stringify({
+          lectureId,
+          question: q,
+          lectureTitle,
+          transcript: cleanTranscript,
+          concepts,
+        }),
       });
 
       const data = await res.json();

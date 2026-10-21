@@ -24,17 +24,45 @@ export default function LecturesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let localList: LectureSummary[] = [];
+    try {
+      const raw = localStorage.getItem("local_lectures_list");
+      if (raw) localList = JSON.parse(raw);
+    } catch {}
+
+    if (localList.length > 0) {
+      setLectures(localList);
+      setLoading(false);
+    }
+
     fetch("/api/lectures")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setLectures(data);
+        if (Array.isArray(data)) {
+          // Merge server data with local cache (server data prioritized if present)
+          const merged = [...data];
+          for (const local of localList) {
+            if (!merged.some((m) => m.id === local.id)) {
+              merged.push(local);
+            }
+          }
+          setLectures(merged);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/lectures/${id}`, { method: "DELETE" });
+    try {
+      await fetch(`/api/lectures/${id}`, { method: "DELETE" });
+      const raw = localStorage.getItem("local_lectures_list");
+      if (raw) {
+        const list = JSON.parse(raw).filter((l: { id: string }) => l.id !== id);
+        localStorage.setItem("local_lectures_list", JSON.stringify(list));
+      }
+      localStorage.removeItem(`lecture_${id}`);
+    } catch {}
     setLectures((prev) => prev.filter((l) => l.id !== id));
   };
 

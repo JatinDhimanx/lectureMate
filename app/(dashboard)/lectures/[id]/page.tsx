@@ -35,6 +35,24 @@ export default function LectureDetailPage() {
     let isCancelled = false;
     const currentId = lectureId;
 
+    // Check localStorage cache first for immediate zero-latency load on Vercel/serverless
+    try {
+      const cached = localStorage.getItem(`lecture_${currentId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.id === currentId) {
+          setLecture(parsed);
+          setLoading(false);
+          // Sync to server container in background
+          fetch("/api/lectures/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed),
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+
     async function load(retryCount = 0) {
       try {
         const res = await fetch(`/api/lectures/${encodeURIComponent(currentId)}`, {
@@ -45,6 +63,9 @@ export default function LectureDetailPage() {
           if (!isCancelled) {
             setLecture(data);
             setLoading(false);
+            try {
+              localStorage.setItem(`lecture_${currentId}`, JSON.stringify(data));
+            } catch {}
           }
           return;
         }
@@ -65,12 +86,23 @@ export default function LectureDetailPage() {
         }
       }
 
+      // Check localStorage before setting null
       if (!isCancelled) {
+        try {
+          const cached = localStorage.getItem(`lecture_${currentId}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.id === currentId) {
+              setLecture(parsed);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch {}
         setLoading(false);
       }
     }
 
-    setLoading(true);
     load();
 
     return () => {
@@ -351,6 +383,8 @@ export default function LectureDetailPage() {
           lectureId={lecture.id}
           lectureTitle={lecture.title}
           suggestedConcepts={lecture.concepts.slice(0, 5).map((c) => c.name)}
+          cleanTranscript={lecture.cleanTranscript}
+          concepts={lecture.concepts}
         />
       )}
 

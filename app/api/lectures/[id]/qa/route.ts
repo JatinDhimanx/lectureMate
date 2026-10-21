@@ -8,7 +8,8 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const { lectureId, question } = await request.json();
+    const body = await request.json();
+    const { lectureId, question, lectureTitle, transcript, concepts } = body;
 
     if (!lectureId || !question) {
       return NextResponse.json(
@@ -17,7 +18,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const lecture = await repo.getLectureById(lectureId);
+    let lecture = await repo.getLectureById(lectureId);
+    if (!lecture && transcript) {
+      // Ephemeral fallback from client payload on serverless cold starts
+      lecture = {
+        id: lectureId,
+        title: lectureTitle || "Lecture",
+        cleanTranscript: transcript,
+        concepts: concepts || [],
+      } as unknown as typeof lecture;
+    }
+
     if (!lecture) {
       return NextResponse.json(
         { error: "Lecture not found." },

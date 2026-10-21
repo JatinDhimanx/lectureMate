@@ -286,7 +286,13 @@ export async function POST(request: NextRequest) {
         await repo.saveLecture(lectureData, currentUser?.id);
 
         send("progress", { step: "complete", message: "Done!", percent: 100 });
-        send("complete", { lectureId, report, cardCount: cardsForSave.length, quizCount: quizQuestionsForSave.length });
+        send("complete", {
+          lectureId,
+          lecture: lectureData,
+          report,
+          cardCount: cardsForSave.length,
+          quizCount: quizQuestionsForSave.length,
+        });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown pipeline error occurred.";
         send("error", { message });

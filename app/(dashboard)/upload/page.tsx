@@ -141,6 +141,30 @@ export default function UploadPage() {
                 return [...f, { step: data.step, message: data.message, percent: data.percent }];
               });
               if (data.lectureId) {
+                if (data.lecture) {
+                  try {
+                    localStorage.setItem(`lecture_${data.lectureId}`, JSON.stringify(data.lecture));
+                    const rawList = localStorage.getItem("local_lectures_list");
+                    const list = rawList ? JSON.parse(rawList) : [];
+                    const summary = {
+                      id: data.lecture.id,
+                      title: data.lecture.title,
+                      sourceType: data.lecture.sourceType,
+                      wordCount: data.lecture.wordCount,
+                      cardCount: data.lecture.cards?.length || 0,
+                      quizCount: data.lecture.quizQuestions?.length || 0,
+                      qualityReport: data.lecture.qualityReport,
+                      createdAt: new Date().toISOString(),
+                    };
+                    const updatedList = [
+                      summary,
+                      ...list.filter((l: { id: string }) => l.id !== data.lecture.id),
+                    ];
+                    localStorage.setItem("local_lectures_list", JSON.stringify(updatedList));
+                  } catch (e) {
+                    console.warn("Could not cache lecture locally:", e);
+                  }
+                }
                 setDone(true);
                 setTimeout(() => router.push(`/lectures/${data.lectureId}`), 1200);
               }
