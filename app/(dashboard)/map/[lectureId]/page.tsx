@@ -305,34 +305,34 @@ export default function ConceptMapPage() {
       ) : (
         <>
           {/* Top Floating Control Bar */}
-          <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-            <div className="pointer-events-auto flex items-center gap-2 bg-[#121622]/90 backdrop-blur border border-white/10 rounded-2xl px-4 py-2.5 shadow-xl">
+          <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 sm:gap-3 pointer-events-none">
+            <div className="pointer-events-auto flex items-center gap-2 bg-[#121622]/90 backdrop-blur border border-white/10 rounded-2xl px-3 sm:px-4 py-2 shadow-xl">
               <button
                 onClick={() => router.push(`/lectures/${lectureId}`)}
                 className="text-xs font-semibold text-slate-400 hover:text-white transition-colors flex items-center gap-1"
               >
-                <BookOpen className="w-3.5 h-3.5" /> Back to Lecture
+                <BookOpen className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Back to</span> Lecture
               </button>
               <span className="text-slate-600">/</span>
-              <h2 className="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
+              <h2 className="text-xs sm:text-sm font-bold text-white truncate max-w-[120px] xs:max-w-xs sm:max-w-md">
                 {lecture?.title || "Concept Map"}
               </h2>
             </div>
 
-            <div className="pointer-events-auto flex items-center gap-2">
+            <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
               >
-                <Plus className="w-4 h-4" /> Add Concept
+                <Plus className="w-4 h-4" /> <span className="hidden xs:inline">Add</span> Concept
               </button>
 
               {selectedEdgeId && (
                 <button
                   onClick={handleDeleteSelectedEdge}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition-all animate-bounce"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition-all animate-bounce"
                 >
-                  <Trash2 className="w-4 h-4" /> Remove Selected Link
+                  <Trash2 className="w-4 h-4" /> Remove Link
                 </button>
               )}
 
@@ -340,7 +340,7 @@ export default function ConceptMapPage() {
                 onClick={handleSaveMap}
                 disabled={saving}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold transition-all shadow-lg",
+                  "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-white text-xs font-semibold transition-all shadow-lg",
                   saveSuccess
                     ? "bg-emerald-600 shadow-emerald-600/30"
                     : "bg-slate-800 hover:bg-slate-700 border border-white/10"
@@ -353,13 +353,13 @@ export default function ConceptMapPage() {
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                <span>{saving ? "Saving..." : saveSuccess ? "Saved!" : "Save Graph"}</span>
+                <span>{saving ? "Saving..." : saveSuccess ? "Saved!" : "Save"}</span>
               </button>
             </div>
           </div>
 
-          {/* Interactive Help & Mastery Legend */}
-          <div className="absolute bottom-6 left-6 z-10 rounded-2xl border border-white/10 bg-[#121622]/90 backdrop-blur p-4 shadow-2xl max-w-xs space-y-3">
+          {/* Interactive Help & Mastery Legend (Hidden on small mobile to keep canvas clean) */}
+          <div className="hidden sm:block absolute bottom-6 left-6 z-10 rounded-2xl border border-white/10 bg-[#121622]/90 backdrop-blur p-4 shadow-2xl max-w-xs space-y-3">
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
               <span>Full Graph Interactivity</span>

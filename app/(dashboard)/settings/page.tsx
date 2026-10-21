@@ -107,14 +107,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="px-6 sm:px-10 py-10 max-w-4xl mx-auto space-y-8">
+    <div className="px-4 sm:px-10 py-6 sm:py-10 max-w-4xl mx-auto space-y-6 sm:space-y-8">
       {/* Header */}
       <div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-semibold mb-2">
           <Sparkles className="w-3.5 h-3.5" />
           <span>Account & Study Engine Configuration</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">Settings & Preferences</h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">Settings & Preferences</h1>
         <p className="text-slate-500 text-xs sm:text-sm mt-1">
           Manage your account credentials, security, and tune your FSRS v5 spaced repetition algorithm.
         </p>
@@ -124,9 +124,9 @@ export default function SettingsPage() {
         {/* ======================================================
             1. ACCOUNT PROFILE & SIGN OUT
         ====================================================== */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-extrabold text-xl flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-extrabold text-lg sm:text-xl flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
               {user?.name ? user.name.charAt(0).toUpperCase() : user?.email ? user.email.charAt(0).toUpperCase() : "U"}
             </div>
             <div>
@@ -143,7 +143,7 @@ export default function SettingsPage() {
 
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 text-rose-700 font-semibold text-xs sm:text-sm transition-all shadow-xs self-end sm:self-auto"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 text-rose-700 font-semibold text-xs sm:text-sm transition-all shadow-xs"
           >
             <LogOut className="w-4 h-4 text-rose-600" />
             <span>Sign Out of Account</span>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
         {/* ======================================================
             2. UPDATE PASSWORD (REPLACED GEMINI API)
         ====================================================== */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-soft">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-soft">
           <div className="flex items-center gap-3.5 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
               <Lock className="w-6 h-6" />
@@ -240,7 +240,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={passwordLoading}
-              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all disabled:opacity-50"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all disabled:opacity-50"
             >
               {passwordLoading ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -257,7 +257,7 @@ export default function SettingsPage() {
         {/* ======================================================
             3. FSRS SPACED REPETITION SETTINGS
         ====================================================== */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-soft">
+        <div className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-soft">
           <div className="flex items-center gap-3.5 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
               <Sliders className="w-6 h-6" />
@@ -314,7 +314,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
             <button
               onClick={handleSaveFsrs}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg"
             >
               {savedSettings ? (
                 <>

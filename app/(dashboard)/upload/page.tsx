@@ -184,14 +184,14 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/20">
       {/* Topbar */}
-      <div className="sticky top-0 z-20 h-16 flex items-center justify-between px-6 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
+      <div className="sticky top-0 z-20 h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-sm shadow-indigo-500/30">
-            <Upload className="w-[18px] h-[18px] text-white" />
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-sm shadow-indigo-500/30">
+            <Upload className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-slate-900">Upload Lecture</h1>
-            <p className="text-[10px] text-slate-400 font-medium">AI-powered study materials generator</p>
+            <h1 className="text-xs sm:text-sm font-bold text-slate-900">Upload Lecture</h1>
+            <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium">AI-powered study materials generator</p>
           </div>
         </div>
         <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-[10px] font-bold">

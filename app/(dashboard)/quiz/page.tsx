@@ -50,7 +50,7 @@ export default function QuizIndexPage() {
   }, []);
 
   return (
-    <div className="px-6 sm:px-10 py-10 max-w-6xl mx-auto space-y-8">
+    <div className="px-4 sm:px-8 py-6 sm:py-10 max-w-6xl mx-auto space-y-6 sm:space-y-8">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -58,7 +58,7 @@ export default function QuizIndexPage() {
             <Lock className="w-3.5 h-3.5 text-amber-500" />
             <span>AI Proctored Examination Suite</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
             Adaptive Diagnostic Quizzes & Exams
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">

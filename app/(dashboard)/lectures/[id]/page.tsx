@@ -145,16 +145,16 @@ export default function LectureDetailPage() {
   ];
 
   return (
-    <div className="px-6 sm:px-10 py-10 max-w-6xl mx-auto">
+    <div className="px-4 sm:px-8 py-6 sm:py-10 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-8">
-        <div className="flex items-start gap-4">
-          <Link href="/lectures" className="mt-1 p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-800 shadow-xs transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <Link href="/lectures" className="mt-1 p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-800 shadow-xs transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">{lecture.title}</h1>
-            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500 font-medium">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">{lecture.title}</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-xs text-slate-500 font-medium">
               <span className="capitalize font-bold text-slate-700">{lecture.sourceType} source</span>
               <span>•</span>
               <span>{lecture.wordCount.toLocaleString()} words</span>
@@ -166,16 +166,16 @@ export default function LectureDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 self-start sm:self-auto w-full sm:w-auto">
           <Link
             href={`/study?lecture=${lecture.id}`}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/20 hover:shadow-lg transition-all"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/20 hover:shadow-lg transition-all"
           >
             <Play className="w-4 h-4" /> Study ({dueCards.length} due)
           </Link>
           <Link
             href={`/map`}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-xs"
+            className="flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-xs"
           >
             <Map className="w-4 h-4" /> Concept Map
           </Link>
@@ -187,13 +187,13 @@ export default function LectureDetailPage() {
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5 flex items-center gap-6 flex-wrap shadow-xs"
+          className="mb-6 sm:mb-8 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5 flex items-center gap-4 sm:gap-6 flex-wrap shadow-xs"
         >
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
             <span className="text-sm text-emerald-950 font-bold">Verifiable Evidence Audit</span>
           </div>
-          <div className="text-xs text-slate-600 flex flex-wrap gap-4 font-medium">
+          <div className="text-xs text-slate-600 flex flex-wrap gap-3 sm:gap-4 font-medium">
             <span>Generated: <strong className="text-slate-900">{qr.totalGenerated}</strong></span>
             <span>Kept: <strong className="text-emerald-700">{qr.cardsKept}</strong></span>
             <span>Duplicates dropped: <strong className="text-amber-700">{qr.duplicatesRemoved}</strong></span>
@@ -206,13 +206,13 @@ export default function LectureDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl mb-6 w-fit">
+      <div className="flex gap-1.5 sm:gap-2 p-1.5 bg-slate-100 rounded-2xl mb-6 overflow-x-auto max-w-full">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all",
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0",
               activeTab === t.id
                 ? "bg-white text-indigo-600 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"

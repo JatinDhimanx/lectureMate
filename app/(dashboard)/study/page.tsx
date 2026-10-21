@@ -43,7 +43,7 @@ function EvidenceDrawer({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0 }}
       transition={{ type: "spring", damping: 25 }}
-      className="fixed top-0 right-0 h-full w-96 bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl"
+      className="fixed top-0 right-0 h-full w-full sm:w-96 max-w-full bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl"
     >
       <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
         <div className="flex items-center gap-2">
@@ -347,7 +347,7 @@ function StudyContent() {
         >
           {/* Front of Card */}
           <div
-            className="w-full rounded-3xl border border-slate-200 bg-white p-8 min-h-[260px] flex flex-col justify-between shadow-soft hover:shadow-card-hover transition-shadow"
+            className="w-full rounded-3xl border border-slate-200 bg-white p-5 sm:p-8 min-h-[220px] sm:min-h-[260px] flex flex-col justify-between shadow-soft hover:shadow-card-hover transition-shadow"
             style={{ backfaceVisibility: "hidden" }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -362,7 +362,7 @@ function StudyContent() {
               <span className="text-xs text-slate-400 font-medium">Click to flip ↷</span>
             </div>
 
-            <p className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug my-auto">
+            <p className="text-lg sm:text-2xl font-bold text-slate-900 leading-snug my-auto">
               {currentCard?.front}
             </p>
 
@@ -374,7 +374,7 @@ function StudyContent() {
 
           {/* Back of Card */}
           <div
-            className="absolute inset-0 rounded-3xl border-2 border-indigo-500/40 bg-white p-8 min-h-[260px] flex flex-col justify-between shadow-soft"
+            className="absolute inset-0 rounded-3xl border-2 border-indigo-500/40 bg-white p-5 sm:p-8 min-h-[220px] sm:min-h-[260px] flex flex-col justify-between shadow-soft"
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
           >
             <div>
@@ -384,7 +384,7 @@ function StudyContent() {
                 </div>
                 <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Answer</span>
               </div>
-              <p className="text-base sm:text-lg font-semibold text-slate-800 leading-relaxed">
+              <p className="text-sm sm:text-lg font-semibold text-slate-800 leading-relaxed">
                 {currentCard?.back}
               </p>
             </div>
@@ -407,7 +407,7 @@ function StudyContent() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className="grid grid-cols-4 gap-3 w-full max-w-xl"
+            className="grid grid-cols-4 gap-1.5 sm:gap-3 w-full max-w-xl"
           >
             {(["again", "hard", "good", "easy"] as RatingKey[]).map((rating, i) => {
               const style = RATING_STYLES[rating];
@@ -416,18 +416,18 @@ function StudyContent() {
                   key={rating}
                   onClick={() => submitRating(rating)}
                   className={cn(
-                    "flex flex-col items-center gap-0.5 py-3 px-2 rounded-2xl border shadow-xs transition-all",
+                    "flex flex-col items-center gap-0.5 py-2.5 sm:py-3 px-1 sm:px-2 rounded-2xl border shadow-xs transition-all",
                     style.border,
                     style.bg
                   )}
                 >
-                  <span className={cn("text-xs font-extrabold capitalize", style.text)}>
+                  <span className={cn("text-[11px] sm:text-xs font-extrabold capitalize", style.text)}>
                     {rating}
                   </span>
-                  <span className={cn("text-[11px] font-bold", style.sub)}>
+                  <span className={cn("text-[10px] sm:text-[11px] font-bold", style.sub)}>
                     {intervals[rating]?.label || "–"}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono mt-0.5">[{i + 1}]</span>
+                  <span className="text-[9px] sm:text-[10px] text-slate-400 font-mono mt-0.5">[{i + 1}]</span>
                 </button>
               );
             })}

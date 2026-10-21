@@ -186,7 +186,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="px-6 sm:px-10 py-10 max-w-6xl mx-auto space-y-8">
+    <div className="px-4 sm:px-8 py-6 sm:py-10 max-w-6xl mx-auto space-y-6 sm:space-y-8">
       {/* Welcome Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -194,7 +194,7 @@ export default function DashboardPage() {
             <Sparkles className="w-3.5 h-3.5" />
             <span>FSRS v5 Cognitive Scheduler</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
             Study Command Center
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">
@@ -212,7 +212,7 @@ export default function DashboardPage() {
           </button>
           <Link
             href="/upload"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 hover:shadow-lg transition-all"
+            className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-xs sm:text-sm shadow-md shadow-indigo-500/20 hover:shadow-lg transition-all"
           >
             <Upload className="w-4 h-4" />
             <span>Upload Material</span>
@@ -221,7 +221,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 4 Stat Badges */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <StatBadge label="Due Today" value={stats.dueToday} icon={Clock} color="indigo" />
         <StatBadge label="Total Cards" value={stats.totalCards} icon={Brain} color="violet" />
         <StatBadge label="Day Streak" value={`${stats.streak}d`} icon={Flame} color="amber" />
@@ -234,17 +234,17 @@ export default function DashboardPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="lg:col-span-2 rounded-3xl border border-slate-100 bg-white p-6 sm:p-8 shadow-soft flex flex-col justify-between"
+          className="lg:col-span-2 rounded-3xl border border-slate-100 bg-white p-5 sm:p-8 shadow-soft flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">Today's Spaced Repetition Queue</h2>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">Today's Spaced Repetition Queue</h2>
               <p className="text-xs text-slate-500 mt-0.5">Optimized for long-term retention using FSRS algorithm</p>
             </div>
             {stats.dueToday > 0 && (
               <Link
                 href="/study"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg self-start sm:self-auto"
               >
                 Study Now <ArrowRight className="w-3.5 h-3.5" />
               </Link>
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                     <button
                       onClick={(e) => handleDeleteLecture(e, l.id)}
                       disabled={deletingId === l.id}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors opacity-0 group-hover:opacity-100 shrink-0 ml-2"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0 ml-2"
                       title="Delete Lecture"
                     >
                       <Trash2 className="w-4 h-4" />
