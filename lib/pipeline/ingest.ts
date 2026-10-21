@@ -81,8 +81,14 @@ export async function ingestTranscript(options: IngestOptions): Promise<IngestRe
   // 2. YouTube Video
   if (sourceType === "youtube") {
     if (!youtubeUrl) throw new Error("YouTube URL is required.");
-    onProgress?.("Fetching verified YouTube captions...", 30);
+    onProgress?.("Checking YouTube video captions...", 20);
     const yt = await fetchYouTubeTranscript(youtubeUrl);
+    if (yt.isAiGeneratedTranscript) {
+      onProgress?.("Public captions disabled; synthesized lecture from video topic...", 30);
+    } else {
+      onProgress?.("Extracted YouTube captions and timestamps...", 30);
+    }
+
     const lastItem = yt.items[yt.items.length - 1];
     const duration = lastItem ? Math.round((lastItem.offset + lastItem.duration) / 1000) : undefined;
 
@@ -107,7 +113,7 @@ export async function ingestTranscript(options: IngestOptions): Promise<IngestRe
     const normDoc: NormalizedDocument = {
       documentId: `doc-yt-${Date.now()}`,
       sourceType: "youtube",
-      title: "YouTube Lecture Video",
+      title: yt.title || "YouTube Lecture Video",
       language: "en",
       wordCount: yt.fullText.split(/\s+/).length,
       durationSeconds: duration,

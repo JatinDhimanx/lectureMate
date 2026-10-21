@@ -246,7 +246,13 @@ export async function POST(request: NextRequest) {
         // Determine optimal academic title
         let resolvedTitle = title?.trim();
         if (!resolvedTitle) {
-          if (fileName) {
+          if (
+            ingestResult.normalizedDocument?.title &&
+            ingestResult.normalizedDocument.title !== "YouTube Lecture Video" &&
+            ingestResult.normalizedDocument.title !== "Pasted Lecture Notes"
+          ) {
+            resolvedTitle = ingestResult.normalizedDocument.title;
+          } else if (fileName) {
             resolvedTitle = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
             // Capitalize title
             resolvedTitle = resolvedTitle.replace(/\b\w/g, (l: string) => l.toUpperCase());
