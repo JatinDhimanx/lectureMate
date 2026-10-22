@@ -108,3 +108,50 @@ export function verifySessionToken(token: string): SessionPayload | null {
     return null;
   }
 }
+
+/**
+ * Create a cryptographically signed, short-lived reset ticket (valid for 15 minutes)
+ * after a user successfully verifies their 6-digit OTP.
+ */
+export function createResetTicket(email: string, expiresInMinutes = 15): string {
+  const payload = {
+    email: email.toLowerCase().trim(),
+    exp: Math.floor(Date.now() / 1000) + expiresInMinutes * 60,
+    purpose: "pwd_reset",
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(payloadB64)
+    .digest("base64url");
+  return `${payloadB64}.${signature}`;
+}
+
+/**
+ * Verify a reset ticket against the target email.
+ */
+export function verifyResetTicket(ticket: string, targetEmail: string): boolean {
+  if (!ticket || !ticket.includes(".")) return false;
+  try {
+    const [payloadB64, signature] = ticket.split(".");
+    if (!payloadB64 || !signature) return false;
+
+    const expectedSig = crypto
+      .createHmac("sha256", AUTH_SECRET)
+      .update(payloadB64)
+      .digest("base64url");
+
+    const sigBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSig);
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+      return false;
+    }
+
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+    if (payload.purpose !== "pwd_reset") return false;
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return false;
+    return payload.email === targetEmail.toLowerCase().trim();
+  } catch {
+    return false;
+  }
+}

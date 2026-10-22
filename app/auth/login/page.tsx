@@ -25,7 +25,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/dashboard";
 
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot" | "verify-signup">("login");
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -39,17 +39,21 @@ function LoginForm() {
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
+  // Email verification state (for new account activation)
+  const [verifyEmailAddress, setVerifyEmailAddress] = useState("");
+  const [verifyOtp, setVerifyOtp] = useState("");
+  const [verifyingEmailOtp, setVerifyingEmailOtp] = useState(false);
+
   // Forgot password state
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotStep, setForgotStep] = useState<"email" | "otp">("email");
   const [forgotOtp, setForgotOtp] = useState("");
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [verifyingResetOtp, setVerifyingResetOtp] = useState(false);
 
   // UI status
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendingVerification, setResendingVerification] = useState(false);
 
   useEffect(() => {
@@ -62,7 +66,11 @@ function LoginForm() {
     }
 
     if (verified === "error") {
-      setErrorMessage("Verification link expired or invalid. Please sign in or request a new link.");
+      setErrorMessage("Verification code expired or invalid. Please request a new code.");
+      setMode("login");
+    } else if (verified === "locked") {
+      const remaining = searchParams.get("remaining") || "15";
+      setErrorMessage(`Account temporarily locked due to 5 failed attempts. Please wait ${remaining} minutes.`);
       setMode("login");
     } else if (verified === "true") {
       setSuccessMessage("Your email has been verified successfully! Please sign in with your credentials.");
@@ -74,7 +82,6 @@ function LoginForm() {
       setSuccessMessage("You have been successfully signed out.");
       setMode("login");
 
-      // Prevent browser Back button from navigating to the previous authenticated dashboard
       window.history.pushState(null, "", window.location.href);
       const handlePopState = () => {
         window.history.pushState(null, "", window.location.href);
@@ -87,10 +94,10 @@ function LoginForm() {
   }, [searchParams]);
 
   // ==========================================
-  // HANDLERS: RESEND VERIFICATION
+  // HANDLERS: RESEND VERIFICATION OTP
   // ==========================================
   const handleResendVerification = async () => {
-    const target = unverifiedEmail || loginEmail;
+    const target = verifyEmailAddress || loginEmail;
     if (!target) return;
     setResendingVerification(true);
     setErrorMessage(null);
@@ -107,11 +114,11 @@ function LoginForm() {
         throw new Error(data.error || "Failed to resend verification email.");
       }
       setSuccessMessage(
-        data.message || `A new verification email has been sent to ${target}! Please check your inbox.`
+        data.message || `A new 6-digit verification code has been sent to ${target}! Please check your email inbox.`
       );
     } catch (err: unknown) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Failed to resend verification email."
+        err instanceof Error ? err.message : "Failed to resend verification code."
       );
     } finally {
       setResendingVerification(false);
@@ -136,8 +143,13 @@ function LoginForm() {
 
       const data = await res.json();
       if (!res.ok) {
+        // If user is not verified, strictly redirect to OTP verification screen
         if (data.code === "EMAIL_NOT_VERIFIED") {
-          setUnverifiedEmail(loginEmail.trim().toLowerCase());
+          setVerifyEmailAddress(loginEmail.trim().toLowerCase());
+          setMode("verify-signup");
+          setErrorMessage(data.error || "Please verify your email before signing in.");
+          setLoading(false);
+          return;
         }
         throw new Error(data.error || "Failed to sign in. Please verify your credentials.");
       }
@@ -189,26 +201,65 @@ function LoginForm() {
         throw new Error(data.error || "Failed to create account.");
       }
 
-      if (data.confirmationRequired) {
-        setSuccessMessage("Account created! A verification link has been sent to your email. Please check your inbox and verify your email before logging in.");
-        setLoginEmail(signupEmail);
-        setMode("login");
-        setLoading(false);
-      } else {
-        setSuccessMessage("Account created successfully! Preparing your dashboard...");
-        setTimeout(() => {
-          router.push(redirectTo);
-          router.refresh();
-        }, 800);
-      }
+      // Transition immediately to the OTP Verification screen for the new user
+      setVerifyEmailAddress(signupEmail.trim().toLowerCase());
+      setVerifyOtp("");
+      setMode("verify-signup");
+      setSuccessMessage(
+        data.message || `Account created! A 6-digit verification code has been sent to ${signupEmail}.`
+      );
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Registration failed.");
+    } finally {
       setLoading(false);
     }
   };
 
   // ==========================================
-  // HANDLERS: FORGOT PASSWORD & OTP VERIFICATION
+  // HANDLERS: VERIFY EMAIL OTP (ACTIVATE ACCOUNT)
+  // ==========================================
+  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanOtp = verifyOtp.trim();
+    if (cleanOtp.length < 6) {
+      setErrorMessage("Please enter the complete 6-digit verification code.");
+      return;
+    }
+
+    setVerifyingEmailOtp(true);
+
+    try {
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: verifyEmailAddress,
+          token: cleanOtp,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid or expired verification code.");
+      }
+
+      setSuccessMessage("Email verified successfully! Taking you to your dashboard...");
+      setTimeout(() => {
+        router.push(data.redirectTo || "/dashboard");
+        router.refresh();
+      }, 700);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to verify email code.");
+    } finally {
+      setVerifyingEmailOtp(false);
+    }
+  };
+
+  // ==========================================
+  // HANDLERS: FORGOT PASSWORD (STEP 1: SEND OTP)
   // ==========================================
   const handleForgotPassword = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -229,8 +280,9 @@ function LoginForm() {
       }
 
       setForgotStep("otp");
+      setForgotOtp("");
       setSuccessMessage(
-        "A 6-digit verification code has been sent to your email. Enter it below to proceed."
+        "A 6-digit reset code has been sent to your email. Enter it below to proceed."
       );
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong.");
@@ -239,6 +291,9 @@ function LoginForm() {
     }
   };
 
+  // ==========================================
+  // HANDLERS: FORGOT PASSWORD (STEP 2: VERIFY OTP)
+  // ==========================================
   const handleVerifyResetCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -250,7 +305,7 @@ function LoginForm() {
       return;
     }
 
-    setVerifyingOtp(true);
+    setVerifyingResetOtp(true);
     try {
       const res = await fetch("/api/auth/verify-reset-code", {
         method: "POST",
@@ -265,18 +320,17 @@ function LoginForm() {
 
       setSuccessMessage("Code verified successfully! Redirecting to set new password...");
       setTimeout(() => {
-        router.push(data.redirectTo || `/auth/reset-password?email=${encodeURIComponent(forgotEmail)}&token=${encodeURIComponent(cleanOtp)}`);
+        router.push(`/auth/reset-password?email=${encodeURIComponent(forgotEmail)}`);
       }, 700);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to verify code.");
     } finally {
-      setVerifyingOtp(false);
+      setVerifyingResetOtp(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFD] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      {/* Google-Style Centerpiece Authentication Card */}
       <div className="sm:mx-auto sm:w-full sm:max-w-[440px]">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -297,12 +351,14 @@ function LoginForm() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
               {mode === "login" && "Sign in"}
               {mode === "signup" && "Create your account"}
+              {mode === "verify-signup" && "Verify your email"}
               {mode === "forgot" && (forgotStep === "otp" ? "Enter verification code" : "Account recovery")}
             </h1>
 
             <p className="mt-1 text-xs text-slate-500">
               {mode === "login" && "to continue to your LectureMate dashboard"}
               {mode === "signup" && "Turn lectures into active recall flashcards & quizzes"}
+              {mode === "verify-signup" && "Enter the 6-digit code sent to your email to activate your account"}
               {mode === "forgot" && (forgotStep === "otp" ? "Enter the 6-digit passcode sent to your email" : "Enter your email to receive password reset instructions")}
             </p>
           </div>
@@ -321,18 +377,6 @@ function LoginForm() {
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
                   <span className="flex-1">{errorMessage}</span>
                 </div>
-                {unverifiedEmail && (
-                  <button
-                    type="button"
-                    onClick={handleResendVerification}
-                    disabled={resendingVerification}
-                    className="self-start ml-6 text-xs font-bold text-indigo-700 hover:text-indigo-900 underline disabled:opacity-50"
-                  >
-                    {resendingVerification
-                      ? "Sending verification email..."
-                      : "✉️ Resend verification email to " + unverifiedEmail}
-                  </button>
-                )}
               </motion.div>
             )}
 
@@ -553,7 +597,105 @@ function LoginForm() {
           )}
 
           {/* ======================================================
-              3. FORGOT PASSWORD VIEW (Two-Step: Email -> OTP Verification)
+              3. VERIFY SIGNUP OTP VIEW (STRICT MANDATORY GATE)
+          ====================================================== */}
+          {mode === "verify-signup" && (
+            <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
+              {/* Target Email Notice */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-indigo-700 tracking-wider">
+                      OTP Sent via Nodemailer
+                    </p>
+                    <p className="text-xs font-semibold text-slate-900 truncate">
+                      {verifyEmailAddress || "Your email"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 shrink-0"
+                >
+                  Change
+                </button>
+              </div>
+
+              {/* 6-Digit OTP Code Input (Strict manual entry, no autofill) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    6-Digit Security Code (OTP)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendingVerification}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold disabled:opacity-50"
+                  >
+                    {resendingVerification ? "Sending..." : "Resend code"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    autoFocus
+                    autoComplete="off"
+                    value={verifyOtp}
+                    onChange={(e) => setVerifyOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Enter 6-digit code"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base tracking-widest font-mono font-bold text-slate-900 placeholder:tracking-normal placeholder:font-sans placeholder:font-normal placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all text-center"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Check your email inbox or spam folder for the 6-digit code.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-xs text-slate-600 hover:text-slate-900 font-semibold py-2 flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to Sign In
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={verifyingEmailOtp || verifyOtp.length < 6}
+                  className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {verifyingEmailOtp ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Verify & Access Dashboard</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ======================================================
+              4. FORGOT PASSWORD VIEW (Two-Step: Email -> OTP Verification)
           ====================================================== */}
           {mode === "forgot" && (
             <div>
@@ -603,20 +745,6 @@ function LoginForm() {
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
-                    </button>
-                  </div>
-
-                  <div className="text-center pt-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setForgotStep("otp");
-                        setErrorMessage(null);
-                        setSuccessMessage(null);
-                      }}
-                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1"
-                    >
-                      Already have a reset code? <span className="font-semibold underline">Enter code here</span>
                     </button>
                   </div>
                 </form>
@@ -672,6 +800,7 @@ function LoginForm() {
                         required
                         maxLength={6}
                         autoFocus
+                        autoComplete="off"
                         value={forgotOtp}
                         onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ""))}
                         placeholder="Enter 6-digit code"
@@ -698,10 +827,10 @@ function LoginForm() {
 
                     <button
                       type="submit"
-                      disabled={verifyingOtp || forgotOtp.length < 6}
+                      disabled={verifyingResetOtp || forgotOtp.length < 6}
                       className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {verifyingOtp ? (
+                      {verifyingResetOtp ? (
                         <RefreshCw className="w-4 h-4 animate-spin" />
                       ) : (
                         <>

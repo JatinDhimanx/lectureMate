@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { repo } from "@/lib/db/repo";
+import { repo, DEMO_USER_ID } from "@/lib/db/repo";
 import { createSessionToken } from "@/lib/auth/security";
+import { checkLockout, recordFailedAttempt, resetFailedAttempts } from "@/lib/auth/lockout";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,94 +16,82 @@ export async function POST(request: NextRequest) {
 
     const trimmedEmail = email.trim().toLowerCase();
 
-    // 1. Authenticate with Supabase if configured
+    // 1. Check 15-minute account lockout (5 failed attempts limit)
+    const lockoutStatus = await checkLockout(trimmedEmail);
+    if (lockoutStatus.isLocked) {
+      return NextResponse.json(
+        {
+          error: `Too many failed attempts. Your account is temporarily locked for ${lockoutStatus.remainingMinutes} more minute(s). Please wait before trying again.`,
+          code: "ACCOUNT_LOCKED",
+          remainingMinutes: lockoutStatus.remainingMinutes,
+        },
+        { status: 429 }
+      );
+    }
+
+    // 2. Authenticate user
     let authenticatedUser: { id: string; email: string; fullName: string } | null = null;
-    let authError: string | null = null;
 
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
+    // Check demo account
+    if (trimmedEmail === "demo@lecturemate.ai" && password === "password123") {
+      authenticatedUser = {
+        id: DEMO_USER_ID,
         email: trimmedEmail,
-        password,
-      });
+        fullName: "Demo Student",
+      };
+    } else {
+      // Authenticate against database
+      const dbUser = await repo.verifyUserPassword(trimmedEmail, password);
 
-      if (!error && data.user && data.user.email) {
-        authenticatedUser = {
-          id: data.user.id,
-          email: data.user.email.toLowerCase().trim(),
-          fullName: data.user.user_metadata?.full_name || trimmedEmail.split("@")[0],
-        };
-      } else if (error) {
-        const isUnconfirmed =
-          error.message.toLowerCase().includes("email not confirmed") ||
-          error.message.toLowerCase().includes("not confirmed") ||
-          error.message.toLowerCase().includes("unconfirmed");
-
-        if (isUnconfirmed) {
+      if (dbUser) {
+        // Enforce email verification strictly: New user cannot enter without verifying OTP
+        if (dbUser.emailVerified === false) {
           return NextResponse.json(
             {
-              error: "Email not verified. Please check your inbox and verify your email before logging in.",
+              error: "Your email has not been verified yet. Please enter the 6-digit verification code sent to your inbox to activate your account.",
               code: "EMAIL_NOT_VERIFIED",
               email: trimmedEmail,
             },
             { status: 403 }
           );
         }
-        authError = error.message;
-      }
-    } catch {
-      // Supabase unavailable / offline
-    }
 
-    // 2. Authenticate against local database repo
-    if (!authenticatedUser) {
-      // Check seeded demo account
-      if (trimmedEmail === "demo@lecturemate.ai" && password === "password123") {
         authenticatedUser = {
-          id: "demo-user-id",
-          email: trimmedEmail,
-          fullName: "Demo Student",
+          id: dbUser.id,
+          email: dbUser.email,
+          fullName: dbUser.fullName,
         };
-      } else {
-        const localUser = await repo.verifyUserPassword(trimmedEmail, password);
-        if (localUser) {
-          if (localUser.emailVerified === false) {
-            return NextResponse.json(
-              {
-                error: "Your email is not verified yet. Please check your inbox for the verification link/code or request a new one.",
-                code: "EMAIL_NOT_VERIFIED",
-                email: trimmedEmail,
-              },
-              { status: 403 }
-            );
-          }
-          authenticatedUser = {
-            id: localUser.id,
-            email: localUser.email,
-            fullName: localUser.fullName,
-          };
-        }
       }
     }
 
+    // 3. Handle failed login
     if (!authenticatedUser) {
+      const failed = await recordFailedAttempt(trimmedEmail);
+
+      if (failed.isLocked) {
+        return NextResponse.json(
+          {
+            error: "Too many failed attempts (5/5). Your account has been locked for 15 minutes for security.",
+            code: "ACCOUNT_LOCKED",
+            remainingMinutes: 15,
+          },
+          { status: 429 }
+        );
+      }
+
       return NextResponse.json(
-        { error: "Invalid email or password. Please try again." },
+        {
+          error: `Invalid email or password. (${failed.attemptsLeft} attempt(s) remaining before a 15-minute security lockout)`,
+          attemptsLeft: failed.attemptsLeft,
+        },
         { status: 401 }
       );
     }
 
-    // Ensure user is recorded in local repository
-    const existing = await repo.findUserByEmail(authenticatedUser.email);
-    if (!existing) {
-      await repo.registerUser({
-        email: authenticatedUser.email,
-        password,
-        fullName: authenticatedUser.fullName,
-      });
-    }
+    // 4. On successful login: Reset failed attempts counter
+    await resetFailedAttempts(trimmedEmail);
 
-    // Generate cryptographically signed session token
+    // 5. Generate cryptographically signed session token
     const token = createSessionToken({
       id: authenticatedUser.id,
       email: authenticatedUser.email,
@@ -121,7 +109,7 @@ export async function POST(request: NextRequest) {
       message: "Signed in successfully!",
     });
 
-    // Set secure HTTP-only session cookie
+    // 6. Set secure HTTP-only session cookie
     response.cookies.set("lm_session", token, {
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -130,7 +118,6 @@ export async function POST(request: NextRequest) {
       sameSite: "lax",
     });
 
-    // Fallback cookie for client-side routing
     response.cookies.set("demo_auth_user", authenticatedUser.email, {
       path: "/",
       maxAge: 60 * 60 * 24 * 7,

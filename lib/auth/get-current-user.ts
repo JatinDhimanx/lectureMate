@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { verifySessionToken } from "./security";
-import { repo } from "@/lib/db/repo";
+import { repo, toValidUuid, DEMO_USER_ID } from "@/lib/db/repo";
 
 export interface CurrentUser {
   id: string;
@@ -20,7 +20,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       // Validate with user store to ensure user exists
       const dbUser = await repo.findUserByEmail(verified.email);
       return {
-        id: dbUser ? dbUser.id : verified.userId,
+        id: dbUser ? dbUser.id : toValidUuid(verified.userId),
         email: verified.email,
         name: dbUser ? dbUser.fullName : verified.name,
       };
@@ -36,11 +36,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
     if (user && user.email) {
       const email = user.email.toLowerCase().trim();
-      const hexId = Buffer.from(email).toString("hex").slice(0, 16);
+      const dbUser = await repo.findUserByEmail(email);
       return {
-        id: user.id || `usr_${hexId}`,
+        id: dbUser ? dbUser.id : toValidUuid(user.id),
         email,
         name:
+          dbUser?.fullName ||
           user.user_metadata?.full_name ||
           email.split("@")[0] ||
           "Student",
@@ -54,11 +55,10 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const demoEmail = cookieStore.get("demo_auth_user")?.value;
   if (demoEmail) {
     const normalized = demoEmail.toLowerCase().trim();
-    const hexId = Buffer.from(normalized).toString("hex").slice(0, 16);
     const dbUser = await repo.findUserByEmail(normalized);
 
     return {
-      id: dbUser ? dbUser.id : `usr_${hexId}`,
+      id: dbUser ? dbUser.id : DEMO_USER_ID,
       email: normalized,
       name: dbUser ? dbUser.fullName : normalized.split("@")[0],
     };

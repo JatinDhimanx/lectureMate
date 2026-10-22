@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { repo } from "@/lib/db/repo";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { checkLockout, recordFailedAttempt, resetFailedAttempts } from "@/lib/auth/lockout";
+import { verifyResetTicket } from "@/lib/auth/security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const { password, confirmPassword, email, token } = await request.json();
+    const { password, confirmPassword, email, token, ticket } = await request.json();
 
     if (!password || password.length < 6) {
       return NextResponse.json(
@@ -35,27 +37,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the 6-digit reset OTP code
-    const cleanToken = typeof token === "string" ? token.trim() : "";
-    if (!cleanToken) {
-      return NextResponse.json(
-        { error: "Please enter the 6-digit verification code sent to your email." },
-        { status: 400 }
-      );
-    }
-
-    const isTokenValid = await repo.verifyResetToken(targetEmail, cleanToken);
-    if (!isTokenValid) {
+    // 1. Check 15-minute security lockout
+    const lockout = await checkLockout(targetEmail);
+    if (lockout.isLocked) {
       return NextResponse.json(
         {
-          error:
-            "Invalid or expired 6-digit reset code. Please check your email or request a new code.",
+          error: `Too many failed attempts. Your account is temporarily locked for ${lockout.remainingMinutes} more minute(s). Please wait before trying again.`,
+          code: "ACCOUNT_LOCKED",
+          remainingMinutes: lockout.remainingMinutes,
         },
-        { status: 400 }
+        { status: 429 }
       );
     }
 
-    // 1. Update in database repository (cryptographically hashes password & invalidates token)
+    // 2. Validate OTP authorization
+    // Either through the verified reset ticket (already verified OTP) or explicit token
+    const cookieStore = await cookies();
+    const cookieTicket = cookieStore.get("lm_reset_ticket")?.value;
+    const providedTicket = ticket || cookieTicket;
+
+    let isAuthorized = false;
+
+    if (providedTicket && verifyResetTicket(providedTicket, targetEmail)) {
+      isAuthorized = true;
+    } else if (token && typeof token === "string" && token.trim().length === 6) {
+      const isTokenValid = await repo.verifyResetToken(targetEmail, token.trim());
+      if (isTokenValid) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      const failed = await recordFailedAttempt(targetEmail);
+      if (failed.isLocked) {
+        return NextResponse.json(
+          {
+            error: "Too many failed attempts (5/5). Your account has been locked for 15 minutes.",
+            code: "ACCOUNT_LOCKED",
+            remainingMinutes: 15,
+          },
+          { status: 429 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: "Reset session expired or invalid. Please verify your 6-digit code again.",
+        },
+        { status: 401 }
+      );
+    }
+
+    // 3. Reset failed attempts counter on success
+    await resetFailedAttempts(targetEmail);
+
+    // 4. Update password in Supabase database directly (cryptographically hashes & invalidates OTP)
     const updated = await repo.updateUserPassword(targetEmail, password);
     if (!updated) {
       return NextResponse.json(
@@ -64,22 +100,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Also sync with Supabase auth if active
-    try {
-      const supabase = await createClient();
-      await supabase.auth.updateUser({ password });
-      await supabase.auth.signOut();
-    } catch {
-      // ignore
-    }
-
     const response = NextResponse.json({
       success: true,
       message: "Password reset successfully! Please sign in with your new password.",
       redirectTo: `/auth/login?reset=success&email=${encodeURIComponent(targetEmail)}`,
     });
 
-    // Clear all session cookies so user explicitly logs in with their new password
+    // Clear reset ticket and previous sessions
+    response.cookies.set("lm_reset_ticket", "", {
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+
     response.cookies.set("lm_session", "", {
       path: "/",
       maxAge: 0,
