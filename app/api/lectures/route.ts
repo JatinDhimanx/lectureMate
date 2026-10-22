@@ -20,7 +20,7 @@ export async function GET() {
       cardCount: l.cards.length,
       quizCount: l.quizQuestions.length,
       qualityReport: l.qualityReport,
-      createdAt: new Date().toISOString(),
+      createdAt: l.createdAt || new Date().toISOString(),
     })),
     {
       headers: {

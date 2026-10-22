@@ -67,6 +67,16 @@ export async function POST(request: NextRequest) {
       } else {
         const localUser = await repo.verifyUserPassword(trimmedEmail, password);
         if (localUser) {
+          if (localUser.emailVerified === false) {
+            return NextResponse.json(
+              {
+                error: "Your email is not verified yet. Please check your inbox for the verification link/code or request a new one.",
+                code: "EMAIL_NOT_VERIFIED",
+                email: trimmedEmail,
+              },
+              { status: 403 }
+            );
+          }
           authenticatedUser = {
             id: localUser.id,
             email: localUser.email,

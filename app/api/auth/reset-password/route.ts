@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { repo } from "@/lib/db/repo";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
-import { createSessionToken } from "@/lib/auth/security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const { password, confirmPassword, email } = await request.json();
+    const { password, confirmPassword, email, token } = await request.json();
 
     if (!password || password.length < 6) {
       return NextResponse.json(
@@ -36,7 +35,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Update in database repository (hashes password & updates passwordResetAt column)
+    // Verify the 6-digit reset OTP code
+    const cleanToken = typeof token === "string" ? token.trim() : "";
+    if (!cleanToken) {
+      return NextResponse.json(
+        { error: "Please enter the 6-digit verification code sent to your email." },
+        { status: 400 }
+      );
+    }
+
+    const isTokenValid = await repo.verifyResetToken(targetEmail, cleanToken);
+    if (!isTokenValid) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid or expired 6-digit reset code. Please check your email or request a new code.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 1. Update in database repository (cryptographically hashes password & invalidates token)
     const updated = await repo.updateUserPassword(targetEmail, password);
     if (!updated) {
       return NextResponse.json(
@@ -45,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Also update in Supabase auth if active
+    // 2. Also sync with Supabase auth if active
     try {
       const supabase = await createClient();
       await supabase.auth.updateUser({ password });
@@ -60,10 +79,11 @@ export async function POST(request: NextRequest) {
       redirectTo: `/auth/login?reset=success&email=${encodeURIComponent(targetEmail)}`,
     });
 
-    // Clear session cookies so user explicitly logs in with their new password
+    // Clear all session cookies so user explicitly logs in with their new password
     response.cookies.set("lm_session", "", {
       path: "/",
       maxAge: 0,
+      expires: new Date(0),
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -72,6 +92,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set("demo_auth_user", "", {
       path: "/",
       maxAge: 0,
+      expires: new Date(0),
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -80,6 +101,7 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to reset password";
+    console.error("[ResetPassword] Error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

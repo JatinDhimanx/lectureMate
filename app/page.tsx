@@ -1404,7 +1404,7 @@ export default function LandingPage() {
                       LectureMate Product Tour & Walkthrough
                     </h3>
                     <p className="text-slate-400 text-xs">
-                      Watch how AI turns 3-hour lectures into verified flashcards & quizzes
+                      {/* todo this later */}
                     </p>
                   </div>
                 </div>
@@ -1462,7 +1462,7 @@ export default function LandingPage() {
               <div className="px-5 sm:px-6 py-3.5 bg-slate-950/60 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="text-slate-400 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Video Location: <code className="text-slate-300 font-mono">public/demo-video.mp4</code></span>
+                  <span><code className="text-slate-300 font-mono"></code></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link

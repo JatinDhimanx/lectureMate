@@ -273,6 +273,8 @@ export async function POST(request: NextRequest) {
 
         const lectureData: DemoLectureData = {
           id: lectureId,
+          userId: currentUser?.id || "demo-user-id",
+          createdAt: new Date().toISOString(),
           title: resolvedTitle,
           sourceType: ingestResult.sourceType,
           sourceUrl: ingestResult.sourceUrl,

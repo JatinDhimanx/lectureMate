@@ -1,6 +1,7 @@
 export interface DemoLectureData {
   id: string;
   userId?: string;
+  createdAt?: string;
   title: string;
   sourceType: string;
   sourceUrl?: string;

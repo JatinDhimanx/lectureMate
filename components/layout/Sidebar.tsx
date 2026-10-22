@@ -67,7 +67,7 @@ export function Sidebar() {
     } catch {
       // ignore
     }
-    window.location.href = "/auth/login";
+    window.location.replace("/auth/login?logged_out=1");
   };
 
   const initial = user?.name

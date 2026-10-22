@@ -41,11 +41,16 @@ function LoginForm() {
 
   // Forgot password state
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotStep, setForgotStep] = useState<"email" | "otp">("email");
+  const [forgotOtp, setForgotOtp] = useState("");
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   // UI status
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   useEffect(() => {
     const verified = searchParams.get("verified");
@@ -65,8 +70,53 @@ function LoginForm() {
     } else if (reset === "success") {
       setSuccessMessage("Password reset successfully! Please sign in with your new password.");
       setMode("login");
+    } else if (searchParams.get("logged_out")) {
+      setSuccessMessage("You have been successfully signed out.");
+      setMode("login");
+
+      // Prevent browser Back button from navigating to the previous authenticated dashboard
+      window.history.pushState(null, "", window.location.href);
+      const handlePopState = () => {
+        window.history.pushState(null, "", window.location.href);
+      };
+      window.addEventListener("popstate", handlePopState);
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
     }
   }, [searchParams]);
+
+  // ==========================================
+  // HANDLERS: RESEND VERIFICATION
+  // ==========================================
+  const handleResendVerification = async () => {
+    const target = unverifiedEmail || loginEmail;
+    if (!target) return;
+    setResendingVerification(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: target }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to resend verification email.");
+      }
+      setSuccessMessage(
+        data.message || `A new verification email has been sent to ${target}! Please check your inbox.`
+      );
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to resend verification email."
+      );
+    } finally {
+      setResendingVerification(false);
+    }
+  };
 
   // ==========================================
   // HANDLERS: LOGIN
@@ -86,6 +136,9 @@ function LoginForm() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.code === "EMAIL_NOT_VERIFIED") {
+          setUnverifiedEmail(loginEmail.trim().toLowerCase());
+        }
         throw new Error(data.error || "Failed to sign in. Please verify your credentials.");
       }
 
@@ -155,10 +208,10 @@ function LoginForm() {
   };
 
   // ==========================================
-  // HANDLERS: FORGOT PASSWORD
+  // HANDLERS: FORGOT PASSWORD & OTP VERIFICATION
   // ==========================================
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleForgotPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
     setLoading(true);
@@ -175,13 +228,49 @@ function LoginForm() {
         throw new Error(data.error || "Failed to process password reset request.");
       }
 
+      setForgotStep("otp");
       setSuccessMessage(
-        data.message || "If an account with this email exists, password reset instructions have been sent to your email inbox."
+        "A 6-digit verification code has been sent to your email. Enter it below to proceed."
       );
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanOtp = forgotOtp.trim();
+    if (cleanOtp.length < 6) {
+      setErrorMessage("Please enter the complete 6-digit verification code.");
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      const res = await fetch("/api/auth/verify-reset-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail, code: cleanOtp }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid or expired 6-digit code.");
+      }
+
+      setSuccessMessage("Code verified successfully! Redirecting to set new password...");
+      setTimeout(() => {
+        router.push(data.redirectTo || `/auth/reset-password?email=${encodeURIComponent(forgotEmail)}&token=${encodeURIComponent(cleanOtp)}`);
+      }, 700);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to verify code.");
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -208,13 +297,13 @@ function LoginForm() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
               {mode === "login" && "Sign in"}
               {mode === "signup" && "Create your account"}
-              {mode === "forgot" && "Account recovery"}
+              {mode === "forgot" && (forgotStep === "otp" ? "Enter verification code" : "Account recovery")}
             </h1>
 
             <p className="mt-1 text-xs text-slate-500">
               {mode === "login" && "to continue to your LectureMate dashboard"}
               {mode === "signup" && "Turn lectures into active recall flashcards & quizzes"}
-              {mode === "forgot" && "Enter your email to receive password reset instructions"}
+              {mode === "forgot" && (forgotStep === "otp" ? "Enter the 6-digit passcode sent to your email" : "Enter your email to receive password reset instructions")}
             </p>
           </div>
 
@@ -226,10 +315,24 @@ function LoginForm() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2.5"
+                className="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex flex-col gap-2"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
-                <span>{errorMessage}</span>
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span className="flex-1">{errorMessage}</span>
+                </div>
+                {unverifiedEmail && (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendingVerification}
+                    className="self-start ml-6 text-xs font-bold text-indigo-700 hover:text-indigo-900 underline disabled:opacity-50"
+                  >
+                    {resendingVerification
+                      ? "Sending verification email..."
+                      : "✉️ Resend verification email to " + unverifiedEmail}
+                  </button>
+                )}
               </motion.div>
             )}
 
@@ -450,56 +553,182 @@ function LoginForm() {
           )}
 
           {/* ======================================================
-              3. FORGOT PASSWORD VIEW (Google Account Recovery Style)
+              3. FORGOT PASSWORD VIEW (Two-Step: Email -> OTP Verification)
           ====================================================== */}
           {mode === "forgot" && (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Account Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="student@university.edu"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
-                  />
-                </div>
-              </div>
+            <div>
+              {forgotStep === "email" ? (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Account Email
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="student@university.edu"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                      />
+                    </div>
+                  </div>
 
-              <div className="pt-2 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setErrorMessage(null);
-                    setSuccessMessage(null);
-                  }}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-semibold py-2 flex items-center gap-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Back
-                </button>
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("login");
+                        setForgotStep("email");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs text-slate-600 hover:text-slate-900 font-semibold py-2 flex items-center gap-1"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" /> Back
+                    </button>
 
-                <button
-                  type="submit"
-                  disabled={loading || !forgotEmail}
-                  className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <span>Send reset link</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+                    <button
+                      type="submit"
+                      disabled={loading || !forgotEmail}
+                      className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <span>Send reset code</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="text-center pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotStep("otp");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1"
+                    >
+                      Already have a reset code? <span className="font-semibold underline">Enter code here</span>
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyResetCode} className="space-y-4">
+                  {/* Target Email Badge */}
+                  <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase font-bold text-indigo-700 tracking-wider">
+                          Code sent to
+                        </p>
+                        <p className="text-xs font-semibold text-slate-900 truncate">
+                          {forgotEmail || "Your account"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotStep("email");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 shrink-0"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  {/* 6-Digit OTP Code Input */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        6-Digit Security Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleForgotPassword()}
+                        disabled={loading}
+                        className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold disabled:opacity-50"
+                      >
+                        {loading ? "Sending..." : "Resend code"}
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        autoFocus
+                        value={forgotOtp}
+                        onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ""))}
+                        placeholder="Enter 6-digit code"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base tracking-widest font-mono font-bold text-slate-900 placeholder:tracking-normal placeholder:font-sans placeholder:font-normal placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all text-center"
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Check your email inbox or spam folder for the 6-digit code.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotStep("email");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs text-slate-600 hover:text-slate-900 font-semibold py-2 flex items-center gap-1"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" /> Back
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={verifyingOtp || forgotOtp.length < 6}
+                      className="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {verifyingOtp ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <span>Verify & Proceed</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="text-center pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("login");
+                        setForgotStep("email");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs text-slate-600 hover:text-slate-900 font-semibold"
+                    >
+                      ← Back to Sign in
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           )}
         </motion.div>
       </div>

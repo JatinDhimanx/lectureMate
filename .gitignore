@@ -25,6 +25,7 @@
 *.pem
 *.mp4
 /.data/
+!public/demo-video.mp4
 
 # debug
 npm-debug.log*

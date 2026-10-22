@@ -103,7 +103,7 @@ export default function SettingsPage() {
     } catch {
       // ignore
     }
-    window.location.href = "/auth/login";
+    window.location.replace("/auth/login?logged_out=1");
   };
 
   return (

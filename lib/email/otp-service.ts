@@ -153,14 +153,17 @@ export async function sendOtpEmail(email: string, otp: string, type: "signup" | 
 
   // If SMTP environment variables are configured (Gmail or custom SMTP)
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const user = process.env.SMTP_USER.trim();
+    const pass = process.env.SMTP_PASS.replace(/\s+/g, "");
+
     try {
       const transporter = nodemailer.createTransport(
         process.env.SMTP_SERVICE
           ? {
               service: process.env.SMTP_SERVICE, // e.g. 'gmail'
               auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS,
+                user,
+                pass,
               },
             }
           : {
@@ -168,14 +171,14 @@ export async function sendOtpEmail(email: string, otp: string, type: "signup" | 
               port: parseInt(process.env.SMTP_PORT || "587"),
               secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
               auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS,
+                user,
+                pass,
               },
             }
       );
 
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"LectureMate" <${process.env.SMTP_USER}>`,
+        from: process.env.SMTP_FROM || `"LectureMate" <${user}>`,
         to: email,
         subject: type === "signup" ? `LectureMate Verification Code: ${otp}` : `LectureMate Login OTP: ${otp}`,
         html,

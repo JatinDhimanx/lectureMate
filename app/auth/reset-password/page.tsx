@@ -15,20 +15,48 @@ import {
   RefreshCw,
   Mail,
   ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const emailParam = searchParams.get("email") || "";
+  const tokenParam = searchParams.get("token") || "";
 
   const [email, setEmail] = useState(emailParam);
+  const [token, setToken] = useState(tokenParam);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleResendCode = async () => {
+    const targetEmail = (email || emailParam).trim().toLowerCase();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      setErrorMessage("Please enter your account email address first.");
+      return;
+    }
+    setErrorMessage(null);
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resend code.");
+      setSuccessMessage("A fresh 6-digit reset code has been sent to your email!");
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to resend code.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +67,12 @@ function ResetPasswordForm() {
 
     if (!targetEmail || !targetEmail.includes("@")) {
       setErrorMessage("Please specify your account email address.");
+      return;
+    }
+
+    const cleanToken = token.trim();
+    if (!cleanToken || cleanToken.length < 6) {
+      setErrorMessage("Please enter the 6-digit reset code (OTP) sent to your email.");
       return;
     }
 
@@ -62,6 +96,7 @@ function ResetPasswordForm() {
           email: targetEmail,
           password,
           confirmPassword,
+          token: cleanToken,
         }),
       });
 
@@ -110,7 +145,7 @@ function ResetPasswordForm() {
               Reset your password
             </h1>
             <p className="mt-1.5 text-xs text-slate-500">
-              Create a new strong password to secure and access your account
+              Enter the 6-digit OTP code sent to your email and choose a new password
             </p>
           </div>
 
@@ -177,6 +212,59 @@ function ResetPasswordForm() {
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
                   />
                 </div>
+              </div>
+            )}
+
+            {/* 6-Digit OTP / Verification Code */}
+            {tokenParam ? (
+              <div className="p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">
+                      Security Code Verified
+                    </p>
+                    <p className="text-xs font-mono font-bold text-emerald-900 tracking-widest">
+                      {token}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] text-emerald-700 font-semibold px-2 py-0.5 rounded-full bg-emerald-100">
+                  Ready
+                </span>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    6-Digit Reset Code (OTP)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={resending}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold disabled:opacity-50"
+                  >
+                    {resending ? "Sending..." : "Resend code"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={token}
+                    onChange={(e) => setToken(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Enter 6-digit code"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base tracking-widest font-mono font-bold text-slate-900 placeholder:tracking-normal placeholder:font-sans placeholder:font-normal placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all text-center"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Check your email inbox for the 6-digit passcode.
+                </p>
               </div>
             )}
 

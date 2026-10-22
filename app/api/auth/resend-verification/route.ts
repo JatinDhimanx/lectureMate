@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { repo } from "@/lib/db/repo";
+import { sendVerificationEmail } from "@/lib/email/mailer";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,34 +18,32 @@ export async function POST(request: NextRequest) {
 
     const trimmedEmail = email.trim().toLowerCase();
     const origin = request.nextUrl.origin;
-    const supabase = await createClient();
 
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email: trimmedEmail,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback?type=signup&next=/auth/verified`,
-      },
-    });
-
-    if (error) {
-      const isRateLimited =
-        error.message.toLowerCase().includes("rate limit") ||
-        error.message.toLowerCase().includes("over_email_send_rate_limit") ||
-        error.status === 429;
-
-      if (isRateLimited) {
-        return NextResponse.json(
-          {
-            error: "Email rate limit exceeded (free tier limit: 3-4 emails/hour). Please wait a few minutes before resending.",
-            code: "RATE_LIMITED",
-          },
-          { status: 429 }
-        );
-      }
-
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    const user = await repo.findUserByEmail(trimmedEmail);
+    if (!user) {
+      return NextResponse.json(
+        { error: "No account found with this email address. Please sign up first." },
+        { status: 404 }
+      );
     }
+
+    if (user.emailVerified) {
+      return NextResponse.json({
+        success: true,
+        message: "Your email is already verified! You can proceed to log in directly.",
+      });
+    }
+
+    // Generate fresh verification token
+    const token = await repo.createVerificationToken(trimmedEmail);
+
+    // Send verification email via Nodemailer
+    await sendVerificationEmail(
+      trimmedEmail,
+      user.fullName || "Student",
+      token,
+      origin
+    );
 
     return NextResponse.json({
       success: true,
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to resend verification";
+    console.error("[ResendVerification] Error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

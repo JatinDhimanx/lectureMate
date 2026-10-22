@@ -19,6 +19,11 @@ export interface UserAccount {
   email: string;
   passwordHash: string; // Cryptographically hashed password
   fullName: string;
+  emailVerified?: boolean;
+  verificationToken?: string;
+  verificationExpiresAt?: string;
+  resetToken?: string;
+  resetTokenExpiresAt?: string;
   passwordResetAt?: string; // New column tracking password reset
   lastLoginAt?: string;
   createdAt: string;
@@ -138,9 +143,14 @@ function loadAllLecturesFromDisk(): DemoLectureData[] {
       for (const file of files) {
         if (file.endsWith(".json")) {
           try {
-            const content = fs.readFileSync(path.join(LECTURES_DIR, file), "utf-8");
+            const filePath = path.join(LECTURES_DIR, file);
+            const content = fs.readFileSync(filePath, "utf-8");
             const lecture = JSON.parse(content) as DemoLectureData;
             if (lecture && lecture.id) {
+              if (!lecture.createdAt) {
+                const stat = fs.statSync(filePath);
+                lecture.createdAt = stat.mtime.toISOString();
+              }
               lectureStore.set(lecture.id, lecture);
             }
           } catch {}
@@ -265,6 +275,8 @@ export const repo = {
     email: string;
     password: string;
     fullName?: string;
+    emailVerified?: boolean;
+    verificationToken?: string;
   }): Promise<UserAccount> => {
     const emailKey = user.email.toLowerCase().trim();
     const hexId = Buffer.from(emailKey).toString("hex").slice(0, 16);
@@ -274,12 +286,74 @@ export const repo = {
       email: emailKey,
       passwordHash: hashPassword(user.password),
       fullName: user.fullName || emailKey.split("@")[0],
+      emailVerified: user.emailVerified ?? false,
+      verificationToken: user.verificationToken,
+      verificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       createdAt: now,
       updatedAt: now,
     };
     userStore.set(emailKey, account);
     saveUsersToDisk();
     return account;
+  },
+
+  createVerificationToken: async (email: string): Promise<string> => {
+    loadUsersFromDisk();
+    const emailKey = email.toLowerCase().trim();
+    const account = userStore.get(emailKey);
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    if (account) {
+      account.verificationToken = token;
+      account.verificationExpiresAt = expiresAt;
+      account.updatedAt = new Date().toISOString();
+      userStore.set(emailKey, account);
+      saveUsersToDisk();
+    }
+    return token;
+  },
+
+  verifyEmailByToken: async (email: string, token: string): Promise<boolean> => {
+    loadUsersFromDisk();
+    const emailKey = email.toLowerCase().trim();
+    const account = userStore.get(emailKey);
+    if (!account) return false;
+    if (account.verificationToken && account.verificationToken === token.trim()) {
+      account.emailVerified = true;
+      account.verificationToken = undefined;
+      account.verificationExpiresAt = undefined;
+      account.updatedAt = new Date().toISOString();
+      userStore.set(emailKey, account);
+      saveUsersToDisk();
+      return true;
+    }
+    return false;
+  },
+
+  createResetToken: async (email: string): Promise<string | null> => {
+    loadUsersFromDisk();
+    const emailKey = email.toLowerCase().trim();
+    const account = userStore.get(emailKey);
+    if (!account) return null;
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+    account.resetToken = token;
+    account.resetTokenExpiresAt = expiresAt;
+    account.updatedAt = new Date().toISOString();
+    userStore.set(emailKey, account);
+    saveUsersToDisk();
+    return token;
+  },
+
+  verifyResetToken: async (email: string, token: string): Promise<boolean> => {
+    loadUsersFromDisk();
+    const emailKey = email.toLowerCase().trim();
+    const account = userStore.get(emailKey);
+    if (!account || !account.resetToken) return false;
+    if (account.resetTokenExpiresAt && new Date(account.resetTokenExpiresAt).getTime() < Date.now()) {
+      return false;
+    }
+    return account.resetToken === token.trim();
   },
 
   findUserByEmail: async (email: string): Promise<UserAccount | null> => {
@@ -327,6 +401,7 @@ export const repo = {
         email: emailKey,
         passwordHash: hashed,
         fullName: emailKey.split("@")[0],
+        emailVerified: true,
         passwordResetAt: now,
         createdAt: now,
         updatedAt: now,
@@ -337,6 +412,8 @@ export const repo = {
 
     account.passwordHash = hashed;
     account.passwordResetAt = now;
+    account.resetToken = undefined;
+    account.resetTokenExpiresAt = undefined;
     account.updatedAt = now;
     userStore.set(emailKey, account);
     saveUsersToDisk();
@@ -349,15 +426,23 @@ export const repo = {
   getLectures: async (userId?: string): Promise<DemoLectureData[]> => {
     // Read from disk to pick up any lectures created across worker processes
     const all = loadAllLecturesFromDisk();
-    if (!userId) return all;
+    let result: DemoLectureData[];
 
-    // If demo user, include the initial sample lecture
-    if (userId === "demo-user-id" || userId.includes("demo")) {
-      return all.filter((l) => l.userId === "demo-user-id" || l.userId === userId || !l.userId);
+    if (!userId) {
+      result = all;
+    } else if (userId === "demo-user-id" || userId.includes("demo")) {
+      result = all.filter((l) => l.userId === "demo-user-id" || l.userId === userId || !l.userId);
+    } else {
+      // Include user's own lectures and any unassigned/legacy lectures
+      result = all.filter((l) => l.userId === userId || !l.userId);
     }
 
-    // Filter strictly by the user's own ID
-    return all.filter((l) => l.userId === userId);
+    // Sort by createdAt / recency descending so the latest uploaded document is always first
+    return result.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   },
 
   getLectureById: async (id: string, userId?: string): Promise<DemoLectureData | null> => {
@@ -372,8 +457,8 @@ export const repo = {
 
     // Check ownership if userId provided
     if (userId && lecture.userId && lecture.userId !== userId) {
-      // Demo lecture can be viewed by demo user
-      if (lecture.userId === "demo-user-id" && (userId === "demo-user-id" || userId.includes("demo"))) {
+      // Demo lecture or unassigned legacy lecture can be accessed
+      if (!lecture.userId || lecture.userId === "demo-user-id" || userId === "demo-user-id" || userId.includes("demo")) {
         return JSON.parse(JSON.stringify(lecture));
       }
       return null;
@@ -386,6 +471,7 @@ export const repo = {
     const toSave: DemoLectureData = {
       ...JSON.parse(JSON.stringify(data)),
       userId: userId || data.userId || "demo-user-id",
+      createdAt: data.createdAt || new Date().toISOString(),
     };
     lectureStore.set(toSave.id, toSave);
     saveLectureToDisk(toSave);

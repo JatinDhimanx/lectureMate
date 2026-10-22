@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   RotateCcw, ChevronRight, X, Bookmark, Edit3, CheckCircle2,
-  AlertCircle, Brain, Sparkles, Layers, ArrowLeft
+  AlertCircle, Brain, Sparkles, Layers, ArrowLeft, ChevronDown,
+  BookOpen, Upload, Plus
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,14 @@ import { CardEditorModal } from "@/components/study/CardEditorModal";
 
 type Card = DemoLectureData["cards"][0];
 type RatingKey = "again" | "hard" | "good" | "easy";
+
+interface LectureSummary {
+  id: string;
+  title: string;
+  cardCount: number;
+  sourceType?: string;
+  createdAt?: string;
+}
 
 const RATING_STYLES: Record<RatingKey, { border: string; bg: string; text: string; sub: string }> = {
   again: { border: "border-rose-200 hover:border-rose-300", bg: "bg-rose-50 hover:bg-rose-100", text: "text-rose-700", sub: "text-rose-500" },
@@ -91,8 +100,6 @@ function EvidenceDrawer({
   );
 }
 
-import { Suspense } from "react";
-
 export default function StudyPage() {
   return (
     <Suspense
@@ -110,7 +117,10 @@ export default function StudyPage() {
 
 function StudyContent() {
   const searchParams = useSearchParams();
-  const lectureId = searchParams.get("lecture");
+  const lectureParam = searchParams.get("lecture");
+
+  const [availableLectures, setAvailableLectures] = useState<LectureSummary[]>([]);
+  const [selectedLectureId, setSelectedLectureId] = useState<string | null>(lectureParam);
   const [lecture, setLecture] = useState<DemoLectureData | null>(null);
   const [queue, setQueue] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -120,28 +130,140 @@ function StudyContent() {
   const [intervals, setIntervals] = useState<Record<string, { label: string }>>({});
   const [reviewedCount, setReviewedCount] = useState(0);
   const [sessionDone, setSessionDone] = useState(false);
-  const startTimeRef = useRef<number>(Date.now());
   const [loading, setLoading] = useState(true);
+  const [deckSelectorOpen, setDeckSelectorOpen] = useState(false);
+  const startTimeRef = useRef<number>(Date.now());
 
-  useEffect(() => {
-    async function load() {
-      const id = lectureId || "d9e8f7a6-b5c4-4d3e-2f1a-0b9c8d7e6f5a";
-      try {
-        const res = await fetch(`/api/lectures/${id}`);
-        if (res.ok) {
-          const data: DemoLectureData = await res.json();
-          setLecture(data);
-          const now = new Date();
-          const due = data.cards.filter(
-            (c) => new Date(c.dueDate) <= now || c.fsrsState === "New"
-          );
-          setQueue((due.length > 0 ? sortDueQueue(due) : data.cards) as unknown as Card[]);
+  const populateQueue = useCallback((data: DemoLectureData) => {
+    if (!data.cards || data.cards.length === 0) {
+      setQueue([]);
+      return;
+    }
+    const now = new Date();
+    const due = data.cards.filter(
+      (c) => new Date(c.dueDate) <= now || c.fsrsState === "New"
+    );
+    // If due cards exist, prioritize them; otherwise supply all cards for study/cramming
+    const cardsToStudy = due.length > 0 ? sortDueQueue(due) : data.cards;
+    setQueue(cardsToStudy as unknown as Card[]);
+  }, []);
+
+  const loadLectureData = useCallback(async (id: string) => {
+    setLoading(true);
+    setSessionDone(false);
+    setCurrentIndex(0);
+    setReviewedCount(0);
+
+    let foundData: DemoLectureData | null = null;
+
+    // 1. Check localStorage first for instant response
+    try {
+      const cached = localStorage.getItem(`lecture_${id}`);
+      if (cached) {
+        const parsed: DemoLectureData = JSON.parse(cached);
+        if (parsed && parsed.id === id && Array.isArray(parsed.cards) && parsed.cards.length > 0) {
+          foundData = parsed;
+          setLecture(parsed);
+          populateQueue(parsed);
+          setLoading(false);
         }
-      } catch {}
+      }
+    } catch {}
+
+    // 2. Fetch from server API
+    try {
+      const res = await fetch(`/api/lectures/${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const serverData: DemoLectureData = await res.json();
+        foundData = serverData;
+        setLecture(serverData);
+        populateQueue(serverData);
+        try {
+          localStorage.setItem(`lecture_${id}`, JSON.stringify(serverData));
+        } catch {}
+      } else if (!foundData) {
+        // If specific ID 404'd, check if any other cached lecture exists
+        try {
+          const rawList = localStorage.getItem("local_lectures_list");
+          if (rawList) {
+            const list: LectureSummary[] = JSON.parse(rawList);
+            const fallback = list.find((l) => l.id !== id);
+            if (fallback) {
+              const fallbackCached = localStorage.getItem(`lecture_${fallback.id}`);
+              if (fallbackCached) {
+                const parsed = JSON.parse(fallbackCached);
+                setLecture(parsed);
+                populateQueue(parsed);
+                setSelectedLectureId(fallback.id);
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn("[study] Failed to fetch lecture data:", err);
+    } finally {
       setLoading(false);
     }
-    load();
-  }, [lectureId]);
+  }, [populateQueue]);
+
+  // Initial load of lectures & deck selection
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function init() {
+      let localList: LectureSummary[] = [];
+      try {
+        const raw = localStorage.getItem("local_lectures_list");
+        if (raw) localList = JSON.parse(raw);
+      } catch {}
+
+      let serverList: LectureSummary[] = [];
+      try {
+        const res = await fetch("/api/lectures");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) serverList = data;
+        }
+      } catch {}
+
+      // Merge server + local lectures, newest first
+      const merged: LectureSummary[] = [...serverList];
+      for (const loc of localList) {
+        if (!merged.some((m) => m.id === loc.id)) {
+          merged.push(loc);
+        }
+      }
+
+      if (isCancelled) return;
+      setAvailableLectures(merged);
+
+      // Select target lecture:
+      // Priority: 1) query param, 2) first uploaded lecture (newest upload), 3) sample demo
+      let targetId = lectureParam;
+      if (!targetId && merged.length > 0) {
+        targetId = merged[0].id;
+      }
+      if (!targetId) {
+        targetId = "d9e8f7a6-b5c4-4d3e-2f1a-0b9c8d7e6f5a";
+      }
+
+      setSelectedLectureId(targetId);
+      await loadLectureData(targetId);
+    }
+
+    init();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [lectureParam, loadLectureData]);
+
+  const handleSelectDeck = (deckId: string) => {
+    setSelectedLectureId(deckId);
+    setDeckSelectorOpen(false);
+    loadLectureData(deckId);
+  };
 
   const currentCard = queue[currentIndex];
 
@@ -189,18 +311,33 @@ function StudyContent() {
   const submitRating = useCallback(async (rating: RatingKey) => {
     if (!currentCard || !lecture) return;
     const duration = Date.now() - startTimeRef.current;
+    const targetLectureId = lecture.id;
+    const cardId = currentCard.id;
 
     try {
       await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lectureId: lecture.id,
-          cardId: currentCard.id,
+          lectureId: targetLectureId,
+          cardId,
           rating,
           reviewDurationMs: duration,
         }),
       });
+    } catch {}
+
+    // Update local cache
+    try {
+      const cached = localStorage.getItem(`lecture_${targetLectureId}`);
+      if (cached) {
+        const parsed: DemoLectureData = JSON.parse(cached);
+        const cardIdx = parsed.cards.findIndex((c) => c.id === cardId);
+        if (cardIdx !== -1) {
+          parsed.cards[cardIdx].reps = (parsed.cards[cardIdx].reps || 0) + 1;
+          localStorage.setItem(`lecture_${targetLectureId}`, JSON.stringify(parsed));
+        }
+      }
     } catch {}
 
     setReviewedCount((r) => r + 1);
@@ -213,20 +350,55 @@ function StudyContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center min-h-[70vh]">
         <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 animate-pulse">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 animate-pulse shadow-sm">
             <Brain className="w-7 h-7" />
           </div>
-          <p className="text-slate-600 text-sm font-semibold">Preparing your active recall deck...</p>
+          <p className="text-slate-700 text-sm font-semibold">Preparing your active recall deck...</p>
+          <p className="text-slate-400 text-xs mt-1">Applying FSRS v5 spaced repetition schedule</p>
         </div>
       </div>
     );
   }
 
-  if (sessionDone || queue.length === 0) {
+  // State A: User has zero lectures uploaded yet
+  if (availableLectures.length === 0 && !lecture) {
     return (
-      <div className="flex items-center justify-center h-full px-6 py-12">
+      <div className="flex items-center justify-center min-h-[70vh] px-6 py-12">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-3xl p-8 sm:p-12 shadow-soft border border-slate-100 text-center max-w-md w-full"
+        >
+          <div className="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-5 shadow-sm">
+            <Layers className="w-10 h-10" />
+          </div>
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-2">
+            No Flashcards Yet
+          </h2>
+          <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+            Upload a document, lecture recording, or pasted notes to instantly generate active recall flashcards with source verification.
+          </p>
+          <div className="flex justify-center">
+            <Link
+              href="/upload"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-sm font-bold shadow-md shadow-indigo-500/20 hover:shadow-lg transition-all inline-flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" /> Upload Material
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // State B: Session finished or all cards caught up
+  if (sessionDone || queue.length === 0) {
+    const hasCardsInDeck = Boolean(lecture?.cards && lecture.cards.length > 0);
+
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] px-6 py-12">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -236,23 +408,32 @@ function StudyContent() {
             <CheckCircle2 className="w-10 h-10" />
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 mb-2">
-            {queue.length === 0 ? "All caught up! 🎉" : "Session Completed! 🎉"}
+            {reviewedCount > 0 ? "Session Completed! 🎉" : "All Caught Up! 🎉"}
           </h2>
           <p className="text-slate-500 text-sm mb-6 leading-relaxed">
             {reviewedCount > 0
               ? `You reviewed ${reviewedCount} card${reviewedCount > 1 ? "s" : ""}. Next reviews scheduled by FSRS v5.`
-              : "No cards currently due for review."}
+              : hasCardsInDeck
+              ? `All ${lecture!.cards.length} cards in this deck are scheduled for future review. You can study ahead now in Cram Mode.`
+              : "No cards found in this deck."}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => { setCurrentIndex(0); setReviewedCount(0); setSessionDone(false); }}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
-            >
-              <RotateCcw className="w-4 h-4 inline mr-2" /> Review Again
-            </button>
+            {hasCardsInDeck && (
+              <button
+                onClick={() => {
+                  setQueue(lecture!.cards as unknown as Card[]);
+                  setCurrentIndex(0);
+                  setReviewedCount(0);
+                  setSessionDone(false);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-sm font-semibold shadow-sm transition-all inline-flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" /> Study All {lecture!.cards.length} Cards
+              </button>
+            )}
             <Link
               href="/dashboard"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-all"
+              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
             >
               Back to Dashboard
             </Link>
@@ -265,7 +446,7 @@ function StudyContent() {
   const progress = ((currentIndex + 1) / Math.max(queue.length, 1)) * 100;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-6 py-10 relative">
+    <div className="flex flex-col items-center justify-center min-h-full px-4 sm:px-6 py-8 sm:py-10 relative">
       <AnimatePresence>
         {evidenceOpen && lecture && currentCard && (
           <EvidenceDrawer
@@ -275,6 +456,56 @@ function StudyContent() {
           />
         )}
       </AnimatePresence>
+
+      {/* Deck Selector & Actions Bar */}
+      <div className="w-full max-w-xl mb-4 flex items-center justify-between gap-3">
+        {/* Deck Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setDeckSelectorOpen((o) => !o)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 hover:border-indigo-300 hover:bg-slate-50/80 shadow-xs transition-all max-w-[240px] sm:max-w-xs truncate"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span className="truncate">{lecture?.title || "Current Lecture Deck"}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-0.5" />
+          </button>
+
+          {deckSelectorOpen && availableLectures.length > 0 && (
+            <div className="absolute left-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-slate-200 shadow-xl z-30 p-2 max-h-72 overflow-y-auto">
+              <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                <span>Select Lecture Deck</span>
+                <span className="text-[10px] lowercase text-slate-400 font-normal">{availableLectures.length} total</span>
+              </div>
+              <div className="py-1">
+                {availableLectures.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectDeck(item.id)}
+                    className={cn(
+                      "w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between transition-colors",
+                      item.id === selectedLectureId
+                        ? "bg-indigo-50 text-indigo-700 font-bold"
+                        : "text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    <span className="truncate pr-2">{item.title}</span>
+                    <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                      {item.cardCount} cards
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Link
+          href="/upload"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" /> Upload More
+        </Link>
+      </div>
 
       {/* Progress & Header */}
       <div className="w-full max-w-xl mb-6">

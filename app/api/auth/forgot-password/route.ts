@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { repo } from "@/lib/db/repo";
+import { sendPasswordResetEmail } from "@/lib/email/mailer";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,16 +19,21 @@ export async function POST(request: NextRequest) {
     const trimmedEmail = email.trim().toLowerCase();
     const origin = request.nextUrl.origin;
 
-    // Trigger Supabase password recovery email if configured
-    try {
-      const supabase = await createClient();
-      await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: `${origin}/auth/callback?type=recovery&next=/auth/reset-password`,
-      });
-    } catch {
-      // ignore
+    const user = await repo.findUserByEmail(trimmedEmail);
+
+    if (user) {
+      const resetToken = await repo.createResetToken(trimmedEmail);
+      if (resetToken) {
+        await sendPasswordResetEmail(
+          trimmedEmail,
+          user.fullName || "Student",
+          resetToken,
+          origin
+        );
+      }
     }
 
+    // Always return a consistent success message for privacy/security
     return NextResponse.json({
       success: true,
       message: `If an account with ${trimmedEmail} exists, password reset instructions have been sent to your email inbox.`,
@@ -32,6 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to process request";
+    console.error("[ForgotPassword] Error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
