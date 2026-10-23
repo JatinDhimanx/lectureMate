@@ -174,7 +174,12 @@ export async function POST(request: NextRequest) {
         const conceptIdMap: Record<string, string> = {};
         const lectureId = crypto.randomUUID();
 
-        const conceptsForSave = conceptResult.concepts.map((c, i) => {
+        // Sort concepts strictly by importanceScore descending to surface the most critical concepts first
+        const sortedConcepts = [...conceptResult.concepts].sort(
+          (a, b) => (b.importanceScore ?? 0) - (a.importanceScore ?? 0)
+        );
+
+        const conceptsForSave = sortedConcepts.map((c, i) => {
           const id = `c-${lectureId}-${i}`;
           conceptIdMap[c.name] = id;
           return {

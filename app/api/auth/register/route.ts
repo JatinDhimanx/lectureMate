@@ -33,12 +33,13 @@ export async function POST(request: NextRequest) {
       if (!existingUser.emailVerified) {
         // User exists but unverified: send a fresh OTP via Nodemailer
         const token = await repo.createVerificationToken(trimmedEmail);
-        await sendVerificationEmail(trimmedEmail, displayName, token, origin);
+        const mailResult = await sendVerificationEmail(trimmedEmail, displayName, token, origin);
         return NextResponse.json({
           success: true,
           email: trimmedEmail,
           confirmationRequired: true,
-          message: `Your account is pending verification. A fresh 6-digit verification code has been sent to ${trimmedEmail}.`,
+          delivered: mailResult.delivered,
+          message: `Your account is pending verification. A fresh 6-digit verification code has been sent to ${trimmedEmail} (check your inbox or spam folder).`,
         });
       }
 
@@ -63,19 +64,15 @@ export async function POST(request: NextRequest) {
       verificationToken,
     });
 
-    // 4. Send 6-digit OTP strictly via Nodemailer (No Supabase Auth emails)
-    try {
-      await sendVerificationEmail(
-        trimmedEmail,
-        displayName,
-        verificationToken,
-        origin
-      );
-    } catch (mailErr) {
-      console.error("[Register] Failed to deliver verification email via Nodemailer:", mailErr);
-    }
+    // 4. Send 6-digit OTP strictly via Nodemailer
+    const mailResult = await sendVerificationEmail(
+      trimmedEmail,
+      displayName,
+      verificationToken,
+      origin
+    );
 
-    // 5. Return success (DO NOT expose token in response)
+    // 5. Return success
     return NextResponse.json({
       success: true,
       user: {
@@ -84,7 +81,8 @@ export async function POST(request: NextRequest) {
         name: newUser.fullName,
       },
       confirmationRequired: true,
-      message: `Account created! A 6-digit verification code has been sent to your inbox (${trimmedEmail}). Please enter it below to activate your account.`,
+      delivered: mailResult.delivered,
+      message: `Account created! A 6-digit verification code has been sent to ${trimmedEmail}. Please check your inbox or spam folder.`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Registration failed";

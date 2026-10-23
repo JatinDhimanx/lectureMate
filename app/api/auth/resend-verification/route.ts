@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const token = await repo.createVerificationToken(trimmedEmail);
 
     // Send verification email via Nodemailer
-    await sendVerificationEmail(
+    const mailResult = await sendVerificationEmail(
       trimmedEmail,
       user.fullName || "Student",
       token,
@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `A new verification email has been sent to ${trimmedEmail}! Please check your inbox.`,
+      delivered: mailResult.delivered,
+      message: `A fresh 6-digit verification code has been sent to ${trimmedEmail}! Please check your inbox and spam folder.`,
     });
   } catch (err: unknown) {
     const message =

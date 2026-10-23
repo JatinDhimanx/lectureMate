@@ -21,22 +21,29 @@ export async function POST(request: NextRequest) {
 
     const user = await repo.findUserByEmail(trimmedEmail);
 
-    if (user) {
-      const resetToken = await repo.createResetToken(trimmedEmail);
-      if (resetToken) {
-        await sendPasswordResetEmail(
-          trimmedEmail,
-          user.fullName || "Student",
-          resetToken,
-          origin
-        );
-      }
+    if (!user) {
+      return NextResponse.json(
+        { error: "No account found with this email address. Please sign up first." },
+        { status: 404 }
+      );
     }
 
-    // Always return a consistent success message for privacy/security
+    const resetToken = await repo.createResetToken(trimmedEmail);
+    let delivered = false;
+    if (resetToken) {
+      const mailResult = await sendPasswordResetEmail(
+        trimmedEmail,
+        user.fullName || "Student",
+        resetToken,
+        origin
+      );
+      delivered = Boolean(mailResult.delivered);
+    }
+
     return NextResponse.json({
       success: true,
-      message: `If an account with ${trimmedEmail} exists, password reset instructions have been sent to your email inbox.`,
+      delivered,
+      message: `A 6-digit password reset code has been sent to ${trimmedEmail}! Please check your inbox and spam folder.`,
     });
   } catch (err: unknown) {
     const message =

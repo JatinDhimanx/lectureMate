@@ -63,7 +63,10 @@ CLASSIFICATION & STRICT CODE-TRACING RULES:
    - Process / Workflow → "Explain the sequence or role of X in Y"
    - Conceptual mechanics → "Why / How does X work?"
    - Code Tracing → Only when actual runnable code is provided.
-4. HIGH-YIELD ACADEMIC SUBJECT MATTER ONLY: Generate cards ONLY for core questions, definitions, mechanisms, derivations, problem-solving, and essential conceptual points. Strictly EXCLUDE meta-exam noise: NEVER create flashcards about exam pattern, marks weightage (e.g., 'how many marks will come'), paper format, grading schemes, or administrative exam instructions.
+4. HIGH-YIELD ESSENTIAL SUBJECT MATTER ONLY (ABSOLUTELY NO TRIVIA OR FLUFF):
+   - Every single flashcard MUST test an essential concept, primary definition, fundamental mechanism, theorem, formula, algorithm step, or key academic distinction.
+   - Strictly DO NOT generate cards for trivial anecdotes, incidental conversational remarks, filler facts, or superficial observations.
+   - Strictly EXCLUDE meta-exam noise: NEVER create flashcards about exam pattern, marks weightage, paper format, grading schemes, or administrative instructions.
 
 BLOOM FOCUS: ${bloomFocus.join(", ")}
 CARD TYPES: ${cardTypes.join(", ")}
@@ -140,9 +143,15 @@ function generateSmartCards(
   const rawSentences = text
     .split(/(?<=[.?!;])\s+|\n+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 20 && !s.startsWith("PK"));
+    .filter((s) => s.length >= 25 && !s.startsWith("PK"));
 
-  const sentences = rawSentences.length > 0 ? rawSentences : [text.trim()];
+  // Filter out low-yield conversational chatter from cards
+  const filteredSentences = rawSentences.filter((s) => {
+    if (/^(hi|hello|okay|so|right|let's|welcome|today|first of all|like I said|thanks|good morning|can you)/i.test(s)) return false;
+    return true;
+  });
+
+  const sentences = filteredSentences.length >= count ? filteredSentences : (rawSentences.length > 0 ? rawSentences : [text.trim()]);
 
   interface CardTemplate {
     front: string;

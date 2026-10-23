@@ -98,7 +98,12 @@ ${cleanedText}
         };
       });
 
-    return { concepts: verifiedConcepts.length > 0 ? verifiedConcepts : result.object.concepts };
+    // Sort strictly by importanceScore descending to keep the most critical concepts at the top
+    const highYieldConcepts = verifiedConcepts
+      .filter((c) => (c.importanceScore ?? 0.7) >= 0.5)
+      .sort((a, b) => (b.importanceScore ?? 0) - (a.importanceScore ?? 0));
+
+    return { concepts: highYieldConcepts.length > 0 ? highYieldConcepts : verifiedConcepts };
   } catch (err) {
     console.warn("Gemini extractConcepts error, using fallback concepts:", err);
     return mockExtractConcepts(cleanedText);

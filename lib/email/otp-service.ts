@@ -143,6 +143,8 @@ export function isEmailOtpVerified(email: string): boolean {
   return stored.verified && !isExpired;
 }
 
+import { getTransporter } from "./mailer";
+
 export function clearStoredOtp(email: string): void {
   otpStore.delete(email.toLowerCase().trim());
 }
@@ -150,44 +152,37 @@ export function clearStoredOtp(email: string): void {
 // Email Dispatcher (Supports real SMTP e.g. Gmail / Outlook or beautiful simulated console dispatch)
 export async function sendOtpEmail(email: string, otp: string, type: "signup" | "login" = "signup") {
   const html = getOtpEmailHtml(otp, type);
+  const text = `
+LectureMate Verification Code: ${otp}
 
-  // If SMTP environment variables are configured (Gmail or custom SMTP)
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+Your 6-digit code for ${type === "signup" ? "account creation" : "login"} is: ${otp}
+(Valid for 10 minutes)
+
+Enter this code on the LectureMate screen to proceed.
+  `.trim();
+
+  const transporter = getTransporter();
+
+  if (transporter && process.env.SMTP_USER) {
     const user = process.env.SMTP_USER.trim();
-    const pass = process.env.SMTP_PASS.replace(/\s+/g, "");
-
     try {
-      const transporter = nodemailer.createTransport(
-        process.env.SMTP_SERVICE
-          ? {
-              service: process.env.SMTP_SERVICE, // e.g. 'gmail'
-              auth: {
-                user,
-                pass,
-              },
-            }
-          : {
-              host: process.env.SMTP_HOST || "smtp.gmail.com",
-              port: parseInt(process.env.SMTP_PORT || "587"),
-              secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-              auth: {
-                user,
-                pass,
-              },
-            }
-      );
-
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"LectureMate" <${user}>`,
+        from: process.env.SMTP_FROM || `LectureMate <${user}>`,
         to: email,
-        subject: type === "signup" ? `LectureMate Verification Code: ${otp}` : `LectureMate Login OTP: ${otp}`,
+        subject: type === "signup" ? `LectureMate - Verification Code is ${otp}` : `LectureMate - Login OTP is ${otp}`,
+        text,
         html,
+        headers: {
+          "X-Priority": "1",
+          Priority: "urgent",
+          Importance: "high",
+        },
       });
 
       console.log(`\n✅ [Real Email Sent] Successfully sent OTP ${otp} to ${email} via SMTP`);
-      return { success: true, simulated: false };
+      return { success: true, delivered: true, simulated: false };
     } catch (error) {
-      console.error("Failed to send email via SMTP, falling back to simulated dispatch:", error);
+      console.error("❌ Failed to send email via SMTP, falling back to simulated dispatch:", error);
     }
   }
 
@@ -200,5 +195,6 @@ export async function sendOtpEmail(email: string, otp: string, type: "signup" | 
   console.log(`Expires In  : 10 minutes`);
   console.log(`======================================================\n`);
 
-  return { success: true, simulated: true, otp };
+  return { success: true, delivered: false, simulated: true, otp };
 }
+

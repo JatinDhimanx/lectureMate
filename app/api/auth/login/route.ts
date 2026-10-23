@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { repo, DEMO_USER_ID } from "@/lib/db/repo";
 import { createSessionToken } from "@/lib/auth/security";
 import { checkLockout, recordFailedAttempt, resetFailedAttempts } from "@/lib/auth/lockout";
+import { sendVerificationEmail } from "@/lib/email/mailer";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,9 +47,22 @@ export async function POST(request: NextRequest) {
       if (dbUser) {
         // Enforce email verification strictly: New user cannot enter without verifying OTP
         if (dbUser.emailVerified === false) {
+          const origin = request.nextUrl.origin;
+          const freshToken = await repo.createVerificationToken(trimmedEmail);
+          try {
+            await sendVerificationEmail(
+              trimmedEmail,
+              dbUser.fullName || "Student",
+              freshToken,
+              origin
+            );
+          } catch (mailErr) {
+            console.error("[Login] Failed to send verification email:", mailErr);
+          }
+
           return NextResponse.json(
             {
-              error: "Your email has not been verified yet. Please enter the 6-digit verification code sent to your inbox to activate your account.",
+              error: `Your email is not verified yet. A fresh 6-digit verification code has been dispatched to ${trimmedEmail}. Please enter it below.`,
               code: "EMAIL_NOT_VERIFIED",
               email: trimmedEmail,
             },

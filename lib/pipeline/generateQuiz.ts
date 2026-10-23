@@ -40,7 +40,8 @@ QUESTION FORMATS:
 3. short_answer: Conceptual open-ended question. Options array can be empty.
 
 RULES:
-- Questions must test deep conceptual understanding, trade-offs, and critical definitions.
+- Questions must test deep conceptual understanding, trade-offs, core mechanisms, formulas, and critical definitions.
+- STRICTLY HIGH-YIELD ESSENTIAL QUESTIONS ONLY: Do not test trivial conversational remarks, random anecdotes, or filler sentences. Questions should test what matters for academic mastery.
 - Distractors must be realistic and reflect common student misconceptions.
 - Cite the EXACT sentence from the lecture in evidenceQuote.
 - CRITICAL - NO EXAM PATTERN OR MARKS QUESTIONS: Test ONLY pure academic concepts, formulas, processes, and problem solving. NEVER create questions about exam pattern, marks allocation, grading scheme, question paper format, or syllabus instructions.
