@@ -1309,7 +1309,7 @@ export default function LandingPage() {
                 Turn any lecture into verified flashcards, adaptive quizzes, and interactive concept maps — powered by AI and FSRS spaced repetition.
               </p>
               <div className="flex gap-3">
-                {["GitHub", "Twitter"].map((s) => (
+                {["GitHub"].map((s) => (
                   <div key={s} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 text-xs font-medium hover:text-white hover:bg-white/10 cursor-pointer transition-colors">
                     {s}
                   </div>
