@@ -6,6 +6,7 @@ import {
   type QuizQuestionItem,
 } from "../ai/schemas";
 import { sanitizeFlashcard } from "./classifier";
+import { isNoiseSentence } from "./clean";
 
 const GROUNDEDNESS_THRESHOLD = 0.82;
 const CLARITY_THRESHOLD = 0.78;
@@ -41,6 +42,12 @@ export function verifyQuotesVerbatim(
   const failed: FlashcardItem[] = [];
 
   for (const rawCard of cards) {
+    // Drop any cards formed from conversational noise or filler
+    if (isNoiseSentence(rawCard.front) || isNoiseSentence(rawCard.evidenceQuote)) {
+      failed.push(rawCard);
+      continue;
+    }
+
     // Sanitize any invalid code-tracing question before verification
     const sanitized = sanitizeFlashcard(rawCard);
     const card: FlashcardItem = {
@@ -258,13 +265,16 @@ export async function verifyAndDeduplicateCards(
 }
 
 /**
- * Verify quiz question quotes are verbatim in transcript.
+ * Verify quiz question quotes are verbatim in transcript and free of conversational noise.
  */
 export function verifyQuizQuotes(
   questions: QuizQuestionItem[],
   transcript: string
 ): QuizQuestionItem[] {
   return questions.filter((q) => {
+    if (isNoiseSentence(q.prompt) || isNoiseSentence(q.evidenceQuote)) {
+      return false;
+    }
     const quote = q.evidenceQuote.trim();
     const found = transcript.includes(quote) || transcript.replace(/\s+/g, " ").includes(quote.replace(/\s+/g, " "));
     if (!found) {

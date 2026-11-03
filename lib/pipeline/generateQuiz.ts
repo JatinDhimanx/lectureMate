@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { getFlashModel, isGeminiConfigured } from "../ai/gemini";
 import { QuizGenerationResultSchema, type QuizQuestionItem } from "../ai/schemas";
+import { isNoiseSentence, scoreAcademicValue } from "./clean";
 
 export interface GenerateQuizOptions {
   cleanedText: string;
@@ -29,22 +30,22 @@ export async function generateQuiz(options: GenerateQuizOptions): Promise<QuizQu
     const result = await generateObject({
       model: getFlashModel(),
       schema: QuizGenerationResultSchema,
-      prompt: `You are an expert academic examiner. Create exactly ${questionCount} rigorous verification quiz questions testing knowledge from the lecture below.
+      prompt: `You are an expert academic examiner and university professor. Create exactly ${questionCount} rigorous, high-yield diagnostic quiz questions testing mastery of the lecture below.
+
+STRICT HIGH-YIELD DIRECTIVES:
+1. TEST ONLY ESSENTIAL ACADEMIC CONCEPTS:
+   - Every single question MUST test a core principle, definition, theorem, formula, algorithm, trade-off, or mechanism.
+   - ABSOLUTELY ZERO TRIVIA OR FLUFF: Never test incidental remarks, classroom logistics, teacher anecdotes, or filler sentences.
+   - ZERO META-EXAM QUESTIONS: Strictly DO NOT ask about exam format, marks allocation, paper pattern, grading scheme, or syllabus rules.
+2. QUESTION FORMATS:
+   - mcq: 4 plausible options (a, b, c, d), exactly ONE is correct. Include distinct whyWrong explanation for each incorrect option.
+   - true_false: 2 options (True, False), exactly ONE is correct.
+3. REALISTIC DISTRACTORS:
+   - Distractors must reflect common student misconceptions or closely related technical alternatives.
+4. EXACT EVIDENCE:
+   - Cite the exact verbatim sentence from the lecture in evidenceQuote.
 
 BLOOM FOCUS: ${bloomFocus.join(", ")}
-
-QUESTION FORMATS:
-1. mcq: 4 plausible options (a, b, c, d), exactly ONE is correct.
-   - Include whyWrong explanation for each incorrect option.
-2. true_false: 2 options (True, False), exactly ONE is correct.
-3. short_answer: Conceptual open-ended question. Options array can be empty.
-
-RULES:
-- Questions must test deep conceptual understanding, trade-offs, core mechanisms, formulas, and critical definitions.
-- STRICTLY HIGH-YIELD ESSENTIAL QUESTIONS ONLY: Do not test trivial conversational remarks, random anecdotes, or filler sentences. Questions should test what matters for academic mastery.
-- Distractors must be realistic and reflect common student misconceptions.
-- Cite the EXACT sentence from the lecture in evidenceQuote.
-- CRITICAL - NO EXAM PATTERN OR MARKS QUESTIONS: Test ONLY pure academic concepts, formulas, processes, and problem solving. NEVER create questions about exam pattern, marks allocation, grading scheme, question paper format, or syllabus instructions.
 
 KNOWN CONCEPTS:
 ${concepts.map((c) => `- ${c.name}: ${c.definition}`).join("\n")}
@@ -72,7 +73,8 @@ Return a JSON object with a "questions" array of exactly ${questionCount} items.
 
 /**
  * Smart content-aware quiz generator.
- * Produces crisp, academic 4-option MCQs and True/False questions with step-by-step explanations.
+ * Produces crisp, academic 4-option MCQs and True/False questions based strictly
+ * on high-yield sentences, filtering out all noise.
  */
 function generateSmartQuiz(
   text: string,
@@ -84,7 +86,18 @@ function generateSmartQuiz(
     .map((s) => s.trim())
     .filter((s) => s.length >= 25 && !s.startsWith("PK"));
 
-  const allSentences = rawSentences.length > 0 ? rawSentences : [text.trim()];
+  // Filter out all noise and rank by academic score
+  const scoredSentences = rawSentences
+    .map((s) => ({ s, score: scoreAcademicValue(s) }))
+    .filter((item) => item.score > 0 && !isNoiseSentence(item.s))
+    .sort((a, b) => b.score - a.score);
+
+  const sentences =
+    scoredSentences.length > 0
+      ? scoredSentences.map((item) => item.s)
+      : rawSentences.filter((s) => !isNoiseSentence(s));
+
+  const allSentences = sentences.length > 0 ? sentences : [text.trim()];
 
   function findDefinition(sentence: string): { term: string; def: string } | null {
     const m = sentence.match(/([A-Z][a-zA-Z0-9\s-]{2,45})\s+(?:is|are|means|refers to|defined as|states that)\s+([^.!?]{10,220})/);
@@ -108,14 +121,14 @@ function generateSmartQuiz(
   // 1. Definition-based 4-Option MCQs
   allSentences.forEach((sentence, i) => {
     const def = findDefinition(sentence);
-    if (def && def.term.length > 2) {
+    if (def && def.term.length > 2 && !isNoiseSentence(def.term) && !isNoiseSentence(def.def)) {
       const c1 = concepts[(i + 1) % Math.max(concepts.length, 1)];
       const c2 = concepts[(i + 2) % Math.max(concepts.length, 1)];
       const c3 = concepts[(i + 3) % Math.max(concepts.length, 1)];
 
       pool.push({
         type: "mcq",
-        prompt: `Which of the following correctly defines "${def.term}" according to the material?`,
+        prompt: `Which of the following correctly defines "${def.term}" according to the study material?`,
         correct: def.def,
         options: [
           { id: "a", text: def.def, isCorrect: true },
@@ -123,7 +136,7 @@ function generateSmartQuiz(
           { id: "c", text: c2 ? `It requires ${c2.definition.slice(0, 90)}` : "An outdated protocol no longer used in standard implementations", isCorrect: false, whyWrong: "This describes an adjacent mechanism, not this definition." },
           { id: "d", text: c3 ? `A theoretical model where ${c3.definition.slice(0, 80)}` : "A client-side failure recovery technique", isCorrect: false, whyWrong: "This confuses the term with general client recovery." },
         ],
-        explanation: `Correct: "${def.term}" is defined in the lecture as: "${def.def}".`,
+        explanation: `Correct: "${def.term}" is defined in the material as: "${def.def}".`,
         evidence: sentence,
         concept: def.term,
         bloom: "remember",
@@ -133,9 +146,11 @@ function generateSmartQuiz(
 
   // 2. High-Yield Concept MCQs
   concepts.forEach((concept, i) => {
-    const evidenceSentence = allSentences.find(s =>
-      s.toLowerCase().includes(concept.name.toLowerCase().split(" ")[0])
-    ) || allSentences[i % allSentences.length];
+    if (isNoiseSentence(concept.name) || isNoiseSentence(concept.definition)) return;
+
+    const evidenceSentence =
+      allSentences.find((s) => s.toLowerCase().includes(concept.name.toLowerCase().split(" ")[0])) ||
+      allSentences[i % allSentences.length];
 
     const otherConcept1 = concepts[(i + 1) % concepts.length];
     const otherConcept2 = concepts[(i + 2) % concepts.length];
@@ -157,15 +172,15 @@ function generateSmartQuiz(
     });
   });
 
-  // 3. Factual True/False Questions
+  // 3. Factual True/False Questions (Strictly high-value sentences)
   allSentences.forEach((sentence, i) => {
-    if (sentence.length < 40 || sentence.length > 180) return;
-    const concept = concepts[i % Math.max(concepts.length, 1)]?.name || "Core Principles";
+    if (sentence.length < 40 || sentence.length > 200 || isNoiseSentence(sentence)) return;
+    const concept = concepts[i % Math.max(concepts.length, 1)]?.name || "Core Principle";
 
-    if (/\b(is|are|must|always|cannot|requires|ensures|guarantees)\b/i.test(sentence)) {
+    if (/\b(is|are|must|always|cannot|requires|ensures|guarantees|leads to|results in)\b/i.test(sentence)) {
       pool.push({
         type: "true_false",
-        prompt: `True or False: According to the lecture, "${sentence}"`,
+        prompt: `True or False: According to the study material, "${sentence}"`,
         correct: "True",
         options: [
           { id: "true", text: "True", isCorrect: true },
@@ -179,46 +194,45 @@ function generateSmartQuiz(
     }
   });
 
-  // Fallback
-  if (pool.length === 0) {
-    const firstSent = allSentences[0];
-    pool.push({
-      type: "mcq",
-      prompt: "What is the primary objective of this lecture?",
-      correct: firstSent,
-      options: [
-        { id: "a", text: firstSent, isCorrect: true },
-        { id: "b", text: "To replace modern distributed paradigms with single-host systems", isCorrect: false, whyWrong: "Contradicts standard architecture." },
-        { id: "c", text: "To optimize purely hardware-level bus timings", isCorrect: false, whyWrong: "Off-topic." },
-        { id: "d", text: "To establish that networking failures never occur in production", isCorrect: false, whyWrong: "Networks are inherently fallible." },
-      ],
-      explanation: `The core premise begins with: ${firstSent}`,
-      evidence: firstSent,
-      concept: concepts[0]?.name || "Introduction",
-      bloom: "understand",
-    });
-  }
+  // Fallback if pool is empty
+  const basePool =
+    pool.length > 0
+      ? pool
+      : [
+          {
+            type: "true_false" as const,
+            prompt: `True or False: The material provides a structured framework for understanding ${concepts[0]?.name || "this topic"}.`,
+            correct: "True",
+            options: [
+              { id: "true", text: "True", isCorrect: true },
+              { id: "false", text: "False", isCorrect: false, whyWrong: "The material does provide this structured overview." },
+            ],
+            explanation: "The uploaded material provides a structured foundational explanation of the topic.",
+            evidence: allSentences[0] || text.slice(0, 150),
+            concept: concepts[0]?.name || "Core Topic",
+            bloom: "remember" as const,
+          },
+        ];
 
-  // Generate exactly `count` questions
-  const result: QuizQuestionItem[] = [];
+  const results: QuizQuestionItem[] = [];
   for (let i = 0; i < count; i++) {
-    const template = pool[i % pool.length];
-    const evidence = template.evidence;
-    const rawIdx = text.indexOf(evidence);
+    const item = basePool[i % basePool.length];
+    const rawIdx = text.indexOf(item.evidence);
     const startChar = rawIdx >= 0 ? rawIdx : 0;
 
-    result.push({
-      questionType: template.type,
-      prompt: template.prompt,
-      correctAnswer: template.correct,
-      options: template.options,
-      explanation: template.explanation,
-      evidenceQuote: evidence,
-      evidenceSpan: { startChar, endChar: startChar + evidence.length },
-      bloomLevel: template.bloom,
-      conceptName: template.concept,
+    results.push({
+      questionType: item.type,
+      prompt: item.prompt,
+      options: item.options,
+      correctAnswer: item.correct,
+      explanation: item.explanation,
+      evidenceQuote: item.evidence,
+      evidenceSpan: { startChar, endChar: startChar + item.evidence.length },
+      conceptTested: item.concept,
+      bloomLevel: item.bloom,
+      difficulty: Math.min(5, Math.max(1, (i % 5) + 1)),
     });
   }
 
-  return result;
+  return results;
 }

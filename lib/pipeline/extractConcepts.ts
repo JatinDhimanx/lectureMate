@@ -5,6 +5,7 @@ import {
   type ConceptExtractionResult,
   type ExtractedConceptSchema,
 } from "../ai/schemas";
+import { isNoiseSentence, scoreAcademicValue } from "./clean";
 import type { z } from "zod";
 
 type ExtractedConcept = z.infer<typeof ExtractedConceptSchema>;
@@ -24,6 +25,9 @@ function detectExamCue(text: string): boolean {
   return EXAM_CUE_PATTERNS.some((p) => p.test(text));
 }
 
+const META_EXAM_REGEX =
+  /\b(marks?(\s+allocation|\s+scheme|\s+weightage)?|exam\s+pattern|paper\s+pattern|marking\s+scheme|grading\s+system|syllabus\s+breakdown|section\s+[A-D]\s+pattern|sample\s+paper|due\s+date|attendance)\b/i;
+
 export async function extractConcepts(
   cleanedText: string,
   sections: Array<{ title: string; startChar: number; endChar: number }>
@@ -38,23 +42,21 @@ export async function extractConcepts(
     const result = await generateObject({
       model: getFlashModel(),
       schema: ConceptExtractionResultSchema,
-      prompt: `You are an expert educator and knowledge graph architect. Extract all atomic study concepts from the lecture transcript below.
+      prompt: `You are an expert educator, senior professor, and curriculum architect.
+TASK: Extract all essential, high-yield academic concepts from the cleaned lecture transcript below.
 
-RULES:
-1. Each concept must be a single, discrete, learnable idea (not a broad topic).
-2. Definition: concise, high-yield, 1-3 sentences suitable for a flashcard back.
-3. importanceScore: 0.0-1.0. Boost by:
-   - Repeated mentions across sections → +0.15 each repetition
-   - Long detailed explanation → +0.1
-   - Core definitional concept → base 0.6
-4. examCue: true if the speaker explicitly flagged this core academic concept as important.
-5. sourceSpan.quote: VERBATIM sentence from the transcript that introduces or defines the concept.
-   ⚠️ CRITICAL: The quote MUST exist EXACTLY in the transcript. Do not paraphrase.
-6. prerequisites: list names of other concepts from THIS lecture that must be understood first.
-7. Extract 5-15 concepts depending on transcript length.
-8. CRITICAL - NO EXAM PATTERN OR MARKS FLUFF: Focus EXCLUSIVELY on core subject matter, definitions, theorems, formulas, algorithms, mechanisms, and key points. Do NOT extract administrative or exam-meta details such as "marks allocation", "question paper pattern", "5 marks question", "scheme of examination", "grading criteria", or course logistics.
+STRICT HIGH-YIELD RULES:
+1. ONLY CORE CONCEPTS: Extract discrete, learnable subject-matter ideas (theorems, laws, mechanisms, definitions, formulas, algorithms, principles).
+2. DEFINITION: Concise, rigorous, 1-3 sentences capturing the core mechanism and why it matters.
+3. ABSOLUTELY ZERO FLUFF:
+   - NEVER extract administrative chatter, attendance, assignments, exam format, or conversational filler as concepts.
+   - Strictly avoid superficial phrases like "Introduction", "General Overview", or "Important Tip".
+4. IMPORTANCE SCORE: 0.0 - 1.0. High-yield core concepts should score 0.75 - 1.0.
+5. EXAM CUE: true only if the concept represents an essential examinable subject principle.
+6. SOURCE SPAN: The quote MUST exist verbatim in the transcript.
+7. PREREQUISITES: List other concepts from this lecture that build the foundation for this one.
 
-${examCueDetected ? "⚠️ EXAM CUES DETECTED: This transcript contains explicit emphasis markers. Flag relevant subject-matter concepts with examCue=true.\n" : ""}
+${examCueDetected ? "⚠️ EXAM EMPHASIS DETECTED: Highlight key examinable concepts with examCue=true.\n" : ""}
 
 SECTIONS:
 ${sections.map((s, i) => `Section ${i + 1}: "${s.title}" (chars ${s.startChar}-${s.endChar})`).join("\n")}
@@ -66,11 +68,13 @@ ${cleanedText}
       maxRetries: 1,
     });
 
-    const META_EXAM_REGEX = /\b(marks?(\s+allocation|\s+scheme|\s+weightage)?|exam\s+pattern|paper\s+pattern|marking\s+scheme|grading\s+system|syllabus\s+breakdown|section\s+[A-D]\s+pattern|sample\s+paper)\b/i;
-
-    // Post-process: programmatically verify sourceSpan quotes and filter meta-exam noise
+    // Post-process: verify quotes and purge all noise & meta-exam concepts
     const verifiedConcepts: ExtractedConcept[] = result.object.concepts
-      .filter((c) => !META_EXAM_REGEX.test(c.name) && !META_EXAM_REGEX.test(c.definition))
+      .filter((c) => {
+        if (META_EXAM_REGEX.test(c.name) || META_EXAM_REGEX.test(c.definition)) return false;
+        if (isNoiseSentence(c.name) || isNoiseSentence(c.definition)) return false;
+        return true;
+      })
       .map((c) => {
         const quoteFound = cleanedText.includes(c.sourceSpan.quote);
         if (!quoteFound) {
@@ -98,7 +102,7 @@ ${cleanedText}
         };
       });
 
-    // Sort strictly by importanceScore descending to keep the most critical concepts at the top
+    // Keep only high-yield concepts sorted by importanceScore descending
     const highYieldConcepts = verifiedConcepts
       .filter((c) => (c.importanceScore ?? 0.7) >= 0.5)
       .sort((a, b) => (b.importanceScore ?? 0) - (a.importanceScore ?? 0));
@@ -111,62 +115,69 @@ ${cleanedText}
 }
 
 /**
- * Smart mock: extracts real concepts from the text by identifying key terms,
- * definitions, and important sentences — not generic placeholders.
+ * Smart content-aware concept extractor for local execution.
+ * Evaluates sentences using academic scoring and extracts strictly high-yield definitions,
+ * theorems, formulas, algorithms, and technical mechanisms.
  */
 function mockExtractConcepts(text: string): ConceptExtractionResult {
   const sentences = text
     .split(/(?<=[.?!])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 15 && s.length <= 500);
+    .filter((s) => s.length >= 20 && s.length <= 500);
 
   if (sentences.length === 0) {
     const fallback = text.trim().slice(0, 200);
     return {
-      concepts: [{
-        name: "Core Concept",
-        definition: fallback,
-        importanceScore: 0.8,
-        examCue: false,
-        sourceSpan: { startChar: 0, endChar: fallback.length, quote: fallback },
-        prerequisites: [],
-      }],
+      concepts: [
+        {
+          name: "Core Principle",
+          definition: fallback,
+          importanceScore: 0.85,
+          examCue: false,
+          sourceSpan: { startChar: 0, endChar: fallback.length, quote: fallback },
+          prerequisites: [],
+        },
+      ],
     };
   }
 
-  // Score sentences by informativeness (longer, with key indicators = more important)
-  const definitionIndicators = /\b(is|are|means|defined as|refers to|known as|called|states that|theorem|law|principle|property|concept|formula|equation|process|method|algorithm)\b/i;
-  const importanceIndicators = /\b(important|key|critical|must|always|never|fundamental|core|primary|main|central|essential)\b/i;
+  // Score sentences using academic density
+  interface ScoredSentence {
+    s: string;
+    score: number;
+    idx: number;
+  }
 
-  interface ScoredSentence { s: string; score: number; idx: number }
-  const scored: ScoredSentence[] = sentences.map((s, i) => {
-    let score = 0;
-    if (definitionIndicators.test(s)) score += 3;
-    if (importanceIndicators.test(s) || detectExamCue(s)) score += 2;
-    if (s.includes(":")) score += 1; // definitions often use colons
-    if (/[A-Z][a-zA-Z]+/.test(s)) score += 1; // proper nouns / technical terms
-    score += Math.min(s.length / 100, 2); // moderate length preference
-    return { s, score, idx: i };
-  });
+  const scored: ScoredSentence[] = sentences
+    .map((s, i) => {
+      if (isNoiseSentence(s) || META_EXAM_REGEX.test(s)) return null;
+      let score = scoreAcademicValue(s);
+      if (detectExamCue(s)) score += 3;
+      return { s, score, idx: i };
+    })
+    .filter((item): item is ScoredSentence => item !== null && item.score > 0);
 
   scored.sort((a, b) => b.score - a.score);
 
-  // Pick top sentences as concept sources (up to 8)
-  const topSentences = scored.slice(0, Math.min(8, scored.length));
+  // Pick top high-yield sentences as concept sources (up to 10)
+  const topSentences = scored.slice(0, Math.min(10, scored.length));
 
-  // Extract concept name from a sentence: look for capitalized terms or the first noun phrase
   function extractConceptName(sentence: string, fallbackIdx: number): string {
-    // Look for "X is defined as" or "X refers to" pattern
-    const defMatch = sentence.match(/^([A-Z][^.,:]{3,40})\s+(is|are|means|refers|states|asserts)/);
+    // 1. Definition patterns: "X is defined as...", "X refers to..."
+    const defMatch = sentence.match(/^([A-Z][a-zA-Z0-9\s-_]{2,40})\s+(?:is|are|means|refers|states|asserts|represents)/);
     if (defMatch) return defMatch[1].trim();
 
-    // Look for capitalized multi-word terms (technical names)
-    const capMatch = sentence.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/);
-    if (capMatch && capMatch[1].length > 3) return capMatch[1].trim();
+    // 2. Theorem / Law / Principle patterns: "Newton's Second Law", "CAP Theorem"
+    const lawMatch = sentence.match(/\b([A-Z][a-zA-Z0-9'’-]+(?:\s+[A-Z][a-zA-Z0-9'’-]+)*\s+(?:Theorem|Law|Principle|Model|Algorithm|Paradox|Rule|Equation))\b/i);
+    if (lawMatch) return lawMatch[1].trim();
 
-    // Fall back to first few meaningful words
-    const words = sentence.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).slice(0, 4);
-    return words.join(" ") || `Concept ${fallbackIdx + 1}`;
+    // 3. Capitalized technical phrases (up to 3 words)
+    const capMatch = sentence.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
+    if (capMatch && capMatch[1].length > 4) return capMatch[1].trim();
+
+    // 4. First meaningful technical term
+    const cleanWords = sentence.replace(/[^a-zA-Z\s]/g, "").trim().split(/\s+/).slice(0, 3);
+    return cleanWords.join(" ") || `Core Concept ${fallbackIdx + 1}`;
   }
 
   const concepts: ExtractedConcept[] = topSentences.map((item, i) => {
@@ -175,19 +186,21 @@ function mockExtractConcepts(text: string): ConceptExtractionResult {
     const charIdx = text.indexOf(sentence);
     const startChar = charIdx >= 0 ? charIdx : 0;
 
-    // Build definition from the sentence and the next sentence (if available)
     const nextSentence = sentences[item.idx + 1] || "";
-    const definition = nextSentence
-      ? `${sentence} ${nextSentence}`.slice(0, 400)
-      : sentence.slice(0, 300);
+    const definition =
+      nextSentence && !isNoiseSentence(nextSentence)
+        ? `${sentence} ${nextSentence}`.slice(0, 350)
+        : sentence.slice(0, 300);
+
+    const importanceScore = Math.min(0.98, Math.max(0.65, 0.6 + item.score * 0.04));
 
     return {
       name,
       definition: definition.trim(),
-      importanceScore: Math.min(0.95, 0.5 + item.score * 0.07),
+      importanceScore,
       examCue: detectExamCue(sentence),
       sourceSpan: { startChar, endChar: startChar + sentence.length, quote: sentence },
-      prerequisites: i > 0 ? [topSentences[0].s.split(" ").slice(0, 3).join(" ")] : [],
+      prerequisites: i > 0 ? [extractConceptName(topSentences[0].s, 0)] : [],
     };
   });
 

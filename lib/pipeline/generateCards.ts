@@ -3,6 +3,7 @@ import { getFlashModel, isGeminiConfigured } from "../ai/gemini";
 import { FlashcardGenerationResultSchema, type FlashcardItem } from "../ai/schemas";
 import { chunkTextForProcessing } from "./segment";
 import { isExecutableCodeSnippet, classifyContentType, sanitizeFlashcard } from "./classifier";
+import { isNoiseSentence, scoreAcademicValue } from "./clean";
 
 export interface GenerateCardsOptions {
   cleanedText: string;
@@ -26,7 +27,6 @@ export async function generateCards(options: GenerateCardsOptions): Promise<Flas
 
   if (!isGeminiConfigured()) {
     const rawCards = generateSmartCards(cleanedText, concepts, cardCount);
-    // Sanitize any invalid code-tracing cards in application code
     return rawCards.map((card) => {
       const sanitized = sanitizeFlashcard(card);
       return {
@@ -51,22 +51,23 @@ export async function generateCards(options: GenerateCardsOptions): Promise<Flas
       const result = await generateObject({
         model: getFlashModel(),
         schema: FlashcardGenerationResultSchema,
-        prompt: `You are a world-class computer science professor and curriculum designer. Create exactly ${targetPerChunk} high-yield flashcards from the lecture content below.
+        prompt: `You are an elite professor and master test constructor. Create exactly ${targetPerChunk} high-yield, premium flashcards from the lecture content below.
 
-CLASSIFICATION & STRICT CODE-TRACING RULES:
-1. "Code Tracing / Output Analysis" questions are ALLOWED ONLY when the source contains real, executable code (e.g. valid syntax, method calls, loops, variable assignments, print statements).
-2. NEVER classify conceptual statements, system descriptions, mathematical models, or arrows (e.g., "Viewpoint variation → projective homography + RPC model...") as code tracing or output prediction!
-   - For technique associations like "X → Y + Z", generate a conceptual question (e.g., "Which methods address X?").
-3. Always match the question type to the content:
-   - Definitions → "What is X?" / "Define X"
-   - Comparisons → "What is the difference between X and Y?"
-   - Process / Workflow → "Explain the sequence or role of X in Y"
-   - Conceptual mechanics → "Why / How does X work?"
-   - Code Tracing → Only when actual runnable code is provided.
-4. HIGH-YIELD ESSENTIAL SUBJECT MATTER ONLY (ABSOLUTELY NO TRIVIA OR FLUFF):
+ABSOLUTE HIGH-YIELD DIRECTIVES:
+1. ONLY CORE ACADEMIC CONCEPTS:
    - Every single flashcard MUST test an essential concept, primary definition, fundamental mechanism, theorem, formula, algorithm step, or key academic distinction.
-   - Strictly DO NOT generate cards for trivial anecdotes, incidental conversational remarks, filler facts, or superficial observations.
-   - Strictly EXCLUDE meta-exam noise: NEVER create flashcards about exam pattern, marks weightage, paper format, grading schemes, or administrative instructions.
+   - ABSOLUTELY ZERO TRIVIA OR FLUFF: Never generate cards for conversational banter, incidental anecdotes, greetings, attendance, room numbers, or superficial teacher remarks.
+   - EXCLUDE META-EXAM NOISE: Never create flashcards about exam pattern, marks weightage, paper format, grading schemes, or syllabus logistics.
+2. QUESTION ARCHITECTURE:
+   - Definitions → "What is the core definition and role of X?"
+   - Comparisons → "What is the crucial difference between X and Y?"
+   - Mechanisms / Causes → "Why / How does X operate in Y?"
+   - Problem / Algorithm → "What are the key steps or principles of X?"
+3. CODE TRACING RULES:
+   - "Code Tracing / Output Analysis" questions are ALLOWED ONLY when the section actually contains real, executable programming code.
+   - NEVER mislabel arrows (X → Y) or conceptual workflows as code tracing!
+4. CITE EXACT VERBATIM QUOTES:
+   - The evidenceQuote MUST be an EXACT sentence from the section text below.
 
 BLOOM FOCUS: ${bloomFocus.join(", ")}
 CARD TYPES: ${cardTypes.join(", ")}
@@ -83,7 +84,6 @@ Return a JSON object with a "cards" array of exactly ${targetPerChunk} items.`,
         maxRetries: 1,
       });
 
-      // Post-process and sanitize LLM cards
       const sanitizedCards = result.object.cards.map((card) => {
         const sanitized = sanitizeFlashcard(card);
         return {
@@ -98,39 +98,21 @@ Return a JSON object with a "cards" array of exactly ${targetPerChunk} items.`,
     }
 
     if (allCards.length < cardCount) {
-      const needed = cardCount - allCards.length;
-      const extras = generateSmartCards(cleanedText, concepts, needed);
-      const sanitizedExtras = extras.map((card) => {
-        const sanitized = sanitizeFlashcard(card);
-        return {
-          ...card,
-          front: sanitized.front,
-          back: sanitized.back,
-          type: sanitized.type as FlashcardItem["type"],
-        };
-      });
-      allCards.push(...sanitizedExtras);
+      const extra = generateSmartCards(cleanedText, concepts, cardCount - allCards.length);
+      allCards.push(...extra);
     }
 
     return allCards.slice(0, cardCount);
   } catch (err) {
-    console.warn("Gemini generateCards error, using smart mock cards:", err);
-    const mockCards = generateSmartCards(cleanedText, concepts, cardCount);
-    return mockCards.map((card) => {
-      const sanitized = sanitizeFlashcard(card);
-      return {
-        ...card,
-        front: sanitized.front,
-        back: sanitized.back,
-        type: sanitized.type as FlashcardItem["type"],
-      };
-    });
+    console.warn("Gemini generateCards error, using smart card generator fallback:", err);
+    return generateSmartCards(cleanedText, concepts, cardCount);
   }
 }
 
 /**
  * High-yield, content-aware smart card generator.
- * Uses rigorous content classification to generate accurately typed cards.
+ * Selects only top-scoring academic sentences (definitions, theorems, formulas, mechanisms)
+ * and purges all conversational noise.
  */
 function generateSmartCards(
   text: string,
@@ -145,13 +127,18 @@ function generateSmartCards(
     .map((s) => s.trim())
     .filter((s) => s.length >= 25 && !s.startsWith("PK"));
 
-  // Filter out low-yield conversational chatter from cards
-  const filteredSentences = rawSentences.filter((s) => {
-    if (/^(hi|hello|okay|so|right|let's|welcome|today|first of all|like I said|thanks|good morning|can you)/i.test(s)) return false;
-    return true;
-  });
+  // Aggressively filter out conversational noise & rank by academic score
+  const scoredSentences = rawSentences
+    .map((s) => ({ s, score: scoreAcademicValue(s) }))
+    .filter((item) => item.score > 0 && !isNoiseSentence(item.s))
+    .sort((a, b) => b.score - a.score);
 
-  const sentences = filteredSentences.length >= count ? filteredSentences : (rawSentences.length > 0 ? rawSentences : [text.trim()]);
+  const sentences =
+    scoredSentences.length > 0
+      ? scoredSentences.map((item) => item.s)
+      : rawSentences.filter((s) => !isNoiseSentence(s));
+
+  const validSentences = sentences.length > 0 ? sentences : [text.trim()];
 
   interface CardTemplate {
     front: string;
@@ -164,9 +151,9 @@ function generateSmartCards(
 
   const cardPool: CardTemplate[] = [];
 
-  sentences.forEach((sentence, i) => {
+  validSentences.forEach((sentence, i) => {
     const classification = classifyContentType(sentence);
-    const concept = concepts[i % Math.max(concepts.length, 1)]?.name || "Core Concept";
+    const concept = concepts[i % Math.max(concepts.length, 1)]?.name || "Core Principle";
 
     // 1. Genuine Code Tracing (ONLY when sentence contains executable code!)
     if (classification === "code_tracing" || classification === "debugging") {
@@ -181,7 +168,7 @@ function generateSmartCards(
       return;
     }
 
-    // 2. Process / Workflow (e.g. "Viewpoint variation → projective homography + RPC model...")
+    // 2. Process / Workflow
     if (classification === "process_workflow") {
       if (sentence.includes("→") || sentence.includes("->")) {
         const parts = sentence.split(/→|->/);
@@ -189,7 +176,7 @@ function generateSmartCards(
         const rhs = parts.slice(1).join(" ").trim();
         if (lhs && rhs) {
           cardPool.push({
-            front: `Which methods or models address "${lhs}"?`,
+            front: `Which methods or mechanisms address "${lhs}"?`,
             back: rhs,
             evidence: sentence,
             concept: lhs.slice(0, 30),
@@ -210,10 +197,10 @@ function generateSmartCards(
       return;
     }
 
-    // 3. Comparisons
+    // 3. Comparisons & Contrasts
     if (classification === "comparison") {
       cardPool.push({
-        front: `What is the crucial difference or comparison highlighted here: "${sentence.slice(0, 80)}..."?`,
+        front: `What is the crucial distinction or trade-off highlighted here: "${sentence.slice(0, 80)}..."?`,
         back: sentence,
         evidence: sentence,
         concept,
@@ -238,7 +225,7 @@ function generateSmartCards(
       return;
     }
 
-    // 5. Definitions
+    // 5. Definitions, Laws & Theorems
     const defMatch = sentence.match(/([A-Z][a-zA-Z0-9\s-_]{2,45})\s+(?:is|are|means|refers to|defined as|states that)\s+([^.!?]{10,240})/);
     if (defMatch) {
       const term = defMatch[1].trim();
@@ -253,7 +240,7 @@ function generateSmartCards(
       });
 
       cardPool.push({
-        front: `Explain the internal mechanism or behavior of ${term}:`,
+        front: `Explain the fundamental principle and behavior of ${term}:`,
         back: sentence,
         evidence: sentence,
         concept: term,
@@ -263,8 +250,8 @@ function generateSmartCards(
       return;
     }
 
-    // 6. Causal / Conceptual explanations
-    if (/\b(because|therefore|hence|as a result|requires|guarantees|ensures)\b/i.test(sentence)) {
+    // 6. Causal / Mechanisms
+    if (/\b(because|therefore|hence|as a result|requires|guarantees|ensures|enables|determines)\b/i.test(sentence)) {
       const words = sentence.split(" ");
       cardPool.push({
         front: `Explain the causal mechanism: Why does "${words.slice(0, 8).join(" ")}..." occur?`,
@@ -274,14 +261,25 @@ function generateSmartCards(
         bloom: "understand",
         type: "why_how",
       });
+      return;
     }
+
+    // 7. Core Technical Statement
+    cardPool.push({
+      front: `Explain the key principle articulated here: "${sentence.slice(0, 90)}..."`,
+      back: sentence,
+      evidence: sentence,
+      concept,
+      bloom: "understand",
+      type: "basic",
+    });
   });
 
-  // Concepts baseline cards
+  // Concepts baseline cards for high-yield mastery
   concepts.forEach((concept, i) => {
-    const evidence = sentences[i % sentences.length] || concept.definition;
+    const evidence = validSentences[i % validSentences.length] || concept.definition;
     cardPool.push({
-      front: `Concept Deep-Dive: What is "${concept.name}" and what fundamental problem does it solve?`,
+      front: `Concept Mastery: What is "${concept.name}" and what fundamental problem does it solve?`,
       back: concept.definition,
       evidence,
       concept: concept.name,
@@ -290,7 +288,7 @@ function generateSmartCards(
     });
 
     cardPool.push({
-      front: `Tradeoff Analysis: What are the primary performance and design tradeoffs of ${concept.name}?`,
+      front: `Tradeoff Analysis: What are the primary performance advantages and design tradeoffs of ${concept.name}?`,
       back: `${concept.name}: ${concept.definition}`,
       evidence,
       concept: concept.name,
@@ -299,15 +297,19 @@ function generateSmartCards(
     });
   });
 
-  // Safety fallback
-  const basePool = cardPool.length > 0 ? cardPool : [{
-    front: "What is the primary topic and core objective covered in this study material?",
-    back: sentences[0] || text.slice(0, 200),
-    evidence: sentences[0] || text.slice(0, 200),
-    concept: concepts[0]?.name || "Core Overview",
-    bloom: "remember" as const,
-    type: "basic" as const,
-  }];
+  const basePool =
+    cardPool.length > 0
+      ? cardPool
+      : [
+          {
+            front: "What is the primary topic and core objective covered in this study material?",
+            back: validSentences[0] || text.slice(0, 200),
+            evidence: validSentences[0] || text.slice(0, 200),
+            concept: concepts[0]?.name || "Core Principle",
+            bloom: "remember" as const,
+            type: "basic" as const,
+          },
+        ];
 
   const result: FlashcardItem[] = [];
   for (let i = 0; i < count; i++) {
