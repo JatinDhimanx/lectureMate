@@ -228,9 +228,8 @@ function generateSmartQuiz(
       explanation: item.explanation,
       evidenceQuote: item.evidence,
       evidenceSpan: { startChar, endChar: startChar + item.evidence.length },
-      conceptTested: item.concept,
+      conceptName: item.concept,
       bloomLevel: item.bloom,
-      difficulty: Math.min(5, Math.max(1, (i % 5) + 1)),
     });
   }
 
